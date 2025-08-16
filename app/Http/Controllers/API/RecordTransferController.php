@@ -26,6 +26,8 @@ class RecordTransferController extends BaseController
         // Admin sees all transfers, others only see transfers where they are the recipient
         if (!$user->isAdmin()) {
             $query->where('recipient_id', $user->user_id);
+            // ->orWhere('sender_id', $user->user_id);
+
         }
 
         // Filter by record

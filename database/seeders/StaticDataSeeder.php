@@ -53,28 +53,12 @@ class StaticDataSeeder extends Seeder
             ['type' => 'problem_type', 'code' => 'warehouse', 'label_en' => 'Warehouse', 'label_ar' => 'مخازن', 'description' => ''],
             ['type' => 'problem_type', 'code' => 'reports', 'label_en' => 'Reports', 'label_ar' => 'تقارير', 'description' => ''],
 
-            // Action Types
-            ['type' => 'action_type', 'code' => 'created', 'label_en' => 'Created', 'label_ar' => 'أنشأ', 'description' => 'Record created'],
-            ['type' => 'action_type', 'code' => 'status_updated', 'label_en' => 'Status Updated', 'label_ar' => 'تم تحديث الحالة', 'description' => 'Record status updated'],
-            ['type' => 'action_type', 'code' => 'transferred', 'label_en' => 'Transferred', 'label_ar' => 'تم النقل', 'description' => 'Record transferred'],
-            ['type' => 'action_type', 'code' => 'received', 'label_en' => 'Received', 'label_ar' => 'استلمت', 'description' => 'Record received'],
-            ['type' => 'action_type', 'code' => 'completed', 'label_en' => 'Completed', 'label_ar' => 'مكتمل', 'description' => 'Record completed'],
-            ['type' => 'action_type', 'code' => 'rejected', 'label_en' => 'Rejected', 'label_ar' => 'مرفوض', 'description' => 'Record rejected'],
-            ['type' => 'action_type', 'code' => 'archived', 'label_en' => 'Archived', 'label_ar' => 'أرشفة', 'description' => 'Record archived'],
-            ['type' => 'action_type', 'code' => 'viewed_patient_ehr', 'label_en' => 'Viewed Patient EHR', 'label_ar' => 'تم عرض سجل المريض الإلكتروني', 'description' => 'Accessed external patient EHR'],
-
-            // Access Types
+                  // Access Types
             ['type' => 'access_type', 'code' => 'view_ehr', 'label_en' => 'View EHR', 'label_ar' => 'عرض السجل الإلكتروني', 'description' => 'Viewed external EHR'],
             ['type' => 'access_type', 'code' => 'add_notes_ehr', 'label_en' => 'Add Notes to EHR', 'label_ar' => 'إضافة ملاحظات إلى السجل الإلكتروني', 'description' => 'Added notes to external EHR'],
             ['type' => 'access_type', 'code' => 'update_status_ehr', 'label_en' => 'Update Status in EHR', 'label_ar' => 'تحديث الحالة في السجل الإلكتروني', 'description' => 'Updated status in external EHR'],
 
-            // Workflow Step Status
-            ['type' => 'workflow_step_status', 'code' => 'pending', 'label_en' => 'Pending', 'label_ar' => 'معلق', 'description' => 'Workflow step pending'],
-            ['type' => 'workflow_step_status', 'code' => 'in_progress', 'label_en' => 'In Progress', 'label_ar' => 'قيد التقدم', 'description' => 'Workflow step in progress'],
-            ['type' => 'workflow_step_status', 'code' => 'completed', 'label_en' => 'Completed', 'label_ar' => 'مكتمل', 'description' => 'Workflow step completed'],
-            ['type' => 'workflow_step_status', 'code' => 'skipped', 'label_en' => 'Skipped', 'label_ar' => 'تم التخطي', 'description' => 'Workflow step skipped'],
-            ['type' => 'workflow_step_status', 'code' => 'failed', 'label_en' => 'Failed', 'label_ar' => 'فشل', 'description' => 'Workflow step failed'],
-        ];
+             ];
 
         foreach ($staticData as $data) {
             DB::table('static_data')->insert([

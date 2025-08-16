@@ -21,30 +21,14 @@ class DatabaseSeeder extends Seeder
 
         // Create sample users
         User::create([
-            'username' => 'admin_user',
+            'username' => 'awda-admin',
             'email' => 'admin@example.com',
-            'password_hash' => Hash::make('password'),
+            'password_hash' => Hash::make('awdaAdmin2025@**'),
             'role_code' => 'admin',
             'full_name' => 'Admin User',
             'is_active' => true,
         ]);
 
-        User::create([
-            'username' => 'employee1',
-            'email' => 'emp1@example.com',
-            'password_hash' => Hash::make('password'),
-            'role_code' => 'employee',
-            'full_name' => 'Alice Smith',
-            'is_active' => true,
-        ]);
-
-        User::create([
-            'username' => 'employee2',
-            'email' => 'emp2@example.com',
-            'password_hash' => Hash::make('password'),
-            'role_code' => 'employee',
-            'full_name' => 'Bob Johnson',
-            'is_active' => true,
-        ]);
+    
     }
 }

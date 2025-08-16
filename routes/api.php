@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\StaticController;
+use App\Http\Controllers\API\StaticDataController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\PatientController;
 use App\Http\Controllers\API\MedicalRecordController;
@@ -74,6 +75,20 @@ Route::middleware('auth:sanctum')->group(function () {
 		// Route::delete('transfers/{id}', 'destroy');
 		Route::post('transfers/{id}/receive', 'receive');
 		Route::post('transfers/{id}/complete', 'complete');
+	});
+
+	// Static data management (Admin only)
+	Route::controller(StaticDataController::class)->group(function(){
+		Route::get('static-data', 'index');
+		Route::get('static-data/types', 'getTypes');
+		Route::get('static-data/{id}', 'show');
+		Route::post('static-data', 'store');
+		Route::put('static-data/{id}', 'update');
+		Route::delete('static-data/{id}', 'destroy');
+		Route::post('static-data/{id}/toggle-status', 'toggleStatus');
+		Route::post('static-data/bulk-update-status', 'bulkUpdateStatus');
+		Route::get('static-data/type/{type}', 'getByType');
+		Route::get('static-data/type/{type}/code/{code}', 'getByCode');
 	});
 });
 

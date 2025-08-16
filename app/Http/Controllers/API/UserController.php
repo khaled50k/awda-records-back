@@ -51,7 +51,7 @@ class UserController extends BaseController
 
         $validator = Validator::make($request->all(), [
             'username' => 'required|string|max:50|unique:users',
-            'email' => 'required|string|email|max:255|unique:users',
+            'email' => 'nullable|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
             'full_name' => 'required|string|max:100',
             'role_code' => 'required|string|exists:static_data,code',
@@ -70,7 +70,7 @@ class UserController extends BaseController
 
         $user = User::create([
             'username' => $request->username,
-            'email' => $request->email,
+            'email' => $request->email ?? null,
             'password_hash' => Hash::make($request->password),
             'full_name' => $request->full_name,
             'role_code' => $request->role_code,
@@ -98,7 +98,7 @@ class UserController extends BaseController
 
         $validator = Validator::make($request->all(), [
             'username' => 'sometimes|string|max:50|unique:users,username,' . $id,
-            'email' => 'sometimes|string|email|max:255|unique:users,email,' . $id,
+            'email' => 'nullable|string|email|max:255|unique:users,email,' . $id,
             'password' => 'sometimes|string|min:8',
             'full_name' => 'sometimes|string|max:100',
             'role_code' => 'sometimes|string|exists:static_data,code',
@@ -111,7 +111,7 @@ class UserController extends BaseController
 
         // Update fields
         if ($request->has('username')) $user->username = $request->username;
-        if ($request->has('email')) $user->email = $request->email;
+        if ($request->has('email')) $user->email = $request->email ?? null;
         if ($request->has('password')) $user->password_hash = Hash::make($request->password);
         if ($request->has('full_name')) $user->full_name = $request->full_name;
         if ($request->has('role_code')) $user->role_code = $request->role_code;
