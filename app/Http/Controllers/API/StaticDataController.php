@@ -265,7 +265,7 @@ class StaticDataController extends BaseController
         $usageChecks = [
             'users' => $staticData->users()->exists(),
             'patients' => $staticData->patients()->exists(),
-            'healthCenterMedicalRecords' => $staticData->healthCenterMedicalRecords()->exists(),
+            'healthCenterPatients' => $staticData->healthCenterPatients()->exists(),
             'statusMedicalRecords' => $staticData->statusMedicalRecords()->exists(),
             'actionAuditLogs' => $staticData->actionAuditLogs()->exists(),
             'accessTypeLogs' => $staticData->accessTypeLogs()->exists(),

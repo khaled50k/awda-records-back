@@ -69,12 +69,14 @@ class StaticData extends Model
     }
 
     /**
-     * Get all medical records with this health center type.
+     * Get all patients with this health center.
      */
-    public function healthCenterMedicalRecords(): HasMany
+    public function healthCenterPatients(): HasMany
     {
-        return $this->hasMany(MedicalRecord::class, 'health_center_code', 'code');
+        return $this->hasMany(Patient::class, 'health_center_code', 'code');
     }
+
+
 
     /**
      * Get all medical records with this status.

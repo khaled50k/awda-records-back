@@ -149,7 +149,7 @@ class RecordTransfer extends Model
      */
     public function scopeForRecordsFromHealthCenter(Builder $query, string $healthCenterCode): void
     {
-        $query->whereHas('medicalRecord', function($q) use ($healthCenterCode) {
+        $query->whereHas('medicalRecord.patient', function($q) use ($healthCenterCode) {
             $q->where('health_center_code', $healthCenterCode);
         });
     }
@@ -200,8 +200,7 @@ class RecordTransfer extends Model
     public function scopeWithFullDetails(Builder $query): void
     {
         $query->with([
-            'medicalRecord.patient',
-            'medicalRecord.healthCenter',
+            'medicalRecord.patient.healthCenter',
             'medicalRecord.status',
             'medicalRecord.problemType',
             'sender',

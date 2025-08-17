@@ -19,7 +19,7 @@ class PatientController extends BaseController
     {
         $this->authorize('viewAny', Patient::class);
 
-        $query = Patient::with('gender');
+        $query = Patient::with(['gender', 'healthCenter']);
 
         // Search by name
         if ($request->has('search')) {
@@ -30,6 +30,11 @@ class PatientController extends BaseController
         // Filter by gender
         if ($request->has('gender_code')) {
             $query->withGender($request->gender_code);
+        }
+
+        // Filter by health center
+        if ($request->has('health_center_code')) {
+            $query->fromHealthCenter($request->health_center_code);
         }
 
         $patients = $query->paginate(15);
@@ -45,7 +50,7 @@ class PatientController extends BaseController
      */
     public function show($id)
     {
-        $patient = Patient::with(['gender', 'medicalRecords.transfers.sender', 'medicalRecords.transfers.recipient', 'medicalRecords.healthCenter', 'medicalRecords.status', 'medicalRecords.problemType', 'medicalRecords.creator', 'medicalRecords.lastModifiedBy'])->findOrFail($id);
+        $patient = Patient::with(['gender', 'healthCenter', 'medicalRecords.transfers.sender', 'medicalRecords.transfers.recipient', 'medicalRecords.status', 'medicalRecords.problemType', 'medicalRecords.creator', 'medicalRecords.lastModifiedBy'])->findOrFail($id);
         $this->authorize('view', $patient);
         
         return $this->sendResponse($patient, 'تم جلب بيانات المريض بنجاح');
@@ -65,6 +70,7 @@ class PatientController extends BaseController
             'full_name' => 'required|string|max:100',
             'national_id' => 'required|integer|unique:patients',
             'gender_code' => 'required|string|exists:static_data,code',
+            'health_center_code' => 'nullable|string|exists:static_data,code',
         ]);
 
         if ($validator->fails()) {
@@ -77,14 +83,16 @@ class PatientController extends BaseController
             return $this->sendError('نوع الجنس غير صحيح', [], 422);
         }
 
+  
         $patient = Patient::create([
             'full_name' => $request->full_name,
             'national_id' => $request->national_id,
             'gender_code' => $request->gender_code,
+            'health_center_code' => $request->health_center_code,
         ]);
 
         return $this->sendResponse(
-            ['patient' => $patient->load('gender')],
+            ['patient' => $patient->load(['gender', 'healthCenter'])],
             'تم إنشاء المريض بنجاح',
             201
         );
@@ -106,6 +114,7 @@ class PatientController extends BaseController
             'full_name' => 'sometimes|string|max:100',
             'national_id' => 'sometimes|integer|unique:patients,national_id,' . $id . ',patient_id',
             'gender_code' => 'sometimes|string|exists:static_data,code',
+            'health_center_code' => 'sometimes|string|exists:static_data,code',
         ]);
 
         if ($validator->fails()) {
@@ -116,11 +125,12 @@ class PatientController extends BaseController
         if ($request->has('full_name')) $patient->full_name = $request->full_name;
         if ($request->has('national_id')) $patient->national_id = $request->national_id;
         if ($request->has('gender_code')) $patient->gender_code = $request->gender_code;
+        if ($request->has('health_center_code')) $patient->health_center_code = $request->health_center_code;
 
         $patient->save();
 
         return $this->sendResponse(
-            ['patient' => $patient->load('gender')],
+            ['patient' => $patient->load(['gender', 'healthCenter'])],
             'تم تحديث بيانات المريض بنجاح'
         );
     }

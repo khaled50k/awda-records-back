@@ -33,7 +33,6 @@ class MedicalRecord extends Model
      */
     protected $fillable = [
         'patient_id',
-        'health_center_code',
         'status_code',
         'problem_type_code',
         'created_by',
@@ -48,7 +47,6 @@ class MedicalRecord extends Model
     protected $casts = [
         'patient_id' => 'integer',
         'created_by' => 'integer',
-        'health_center_code' => 'string',
         'last_modified_by' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -65,14 +63,7 @@ class MedicalRecord extends Model
 
 
 
-    /**
-     * Get the health center type information.
-     */
-    public function healthCenter(): BelongsTo
-    {
-        return $this->belongsTo(StaticData::class, 'health_center_code', 'code')
-            ->where('type', 'health_center_type');
-    }
+
 
     /**
      * Get the last modified by user information.
@@ -142,10 +133,13 @@ class MedicalRecord extends Model
 
     /**
      * Scope a query to only include medical records from a specific health center type.
+     * @deprecated Use patient.healthCenter relationship instead
      */
     public function scopeFromHealthCenter(Builder $query, string $healthCenterCode): void
     {
-        $query->where('health_center_code', $healthCenterCode);
+        $query->whereHas('patient', function($q) use ($healthCenterCode) {
+            $q->where('health_center_code', $healthCenterCode);
+        });
     }
 
     /**
@@ -212,13 +206,7 @@ class MedicalRecord extends Model
         $query->whereIn('status_code', $statusCodes);
     }
 
-    /**
-     * Scope a query to only include medical records from multiple health centers.
-     */
-    public function scopeFromHealthCenters(Builder $query, array $healthCenterCodes): void
-    {
-        $query->whereIn('health_center_code', $healthCenterCodes);
-    }
+
 
     /**
      * Scope a query to only include medical records with multiple problem types.
@@ -315,33 +303,9 @@ class MedicalRecord extends Model
         });
     }
 
-    /**
-     * Scope a query to include medical records with all related data for comprehensive view.
-     */
-    public function scopeWithFullDetails(Builder $query): void
-    {
-        $query->with([
-            'patient',
-            'healthCenter',
-            'status',
-            'problemType',
-            'creator',
-            'lastModifier',
-            'transfers.recipient',
-            'transfers.sender',
-            'transfers.workflowSteps',
-            'auditLogs.user',
-            'auditLogs.actionType'
-        ]);
-    }
 
-    /**
-     * Get the health center type label.
-     */
-    public function getHealthCenterTypeLabelAttribute(): string
-    {
-        return $this->healthCenter?->label_en ?? 'Unknown';
-    }
+
+
 
     /**
      * Get the status label.

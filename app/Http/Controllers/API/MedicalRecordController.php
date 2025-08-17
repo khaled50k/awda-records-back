@@ -25,8 +25,7 @@ class MedicalRecordController extends BaseController
 
         $user = auth()->user();
         $query = MedicalRecord::with([
-            'patient', 
-            'healthCenter', 
+            'patient.healthCenter', 
             'status', 
             'problemType', 
             'creator', 
@@ -83,16 +82,7 @@ class MedicalRecordController extends BaseController
             $query->whereIn('status_code', $statusCodes);
         }
 
-        // Filter by health center
-        if ($request->filled('health_center_code')) {
-            $query->fromHealthCenter($request->health_center_code);
-        }
 
-        // Filter by multiple health centers
-        if ($request->filled('health_center_codes')) {
-            $healthCenterCodes = is_array($request->health_center_codes) ? $request->health_center_codes : explode(',', $request->health_center_codes);
-            $query->whereIn('health_center_code', $healthCenterCodes);
-        }
 
         // Filter by problem type
         if ($request->filled('problem_type_code')) {
@@ -224,7 +214,7 @@ class MedicalRecordController extends BaseController
         // Validate sort fields
         $allowedSortFields = [
             'created_at', 'updated_at', 'patient_id', 'status_code', 
-            'health_center_code', 'problem_type_code'
+            'problem_type_code'
         ];
         
         if (in_array($sortBy, $allowedSortFields)) {
@@ -242,7 +232,7 @@ class MedicalRecordController extends BaseController
         // Add filter summary to response
         $filters = $request->only([
             'patient_name', 'patient_national_id', 'patient_gender',
-            'status_code', 'status_codes', 'health_center_code', 'health_center_codes',
+            'status_code', 'status_codes',
             'problem_type_code', 'problem_type_codes', 'created_from', 'created_to',
             'modified_from', 'modified_to', 'date', 'created_by', 'last_modified_by',
             'has_transfers', 'transfer_sender_id', 'transfer_recipient_id',
@@ -281,7 +271,7 @@ class MedicalRecordController extends BaseController
     public function show($id)
     {
         $record = MedicalRecord::with([
-            'patient', 'healthCenter', 'status', 'problemType', 'creator', 'lastModifier', 'transfers.recipient','transfers.sender'
+            'patient.healthCenter', 'status', 'problemType', 'creator', 'lastModifier', 'transfers.recipient','transfers.sender'
         ])->findOrFail($id);
         
         $this->authorize('view', $record);
@@ -302,7 +292,6 @@ class MedicalRecordController extends BaseController
         $validator = Validator::make($request->all(), [
             'patient_id' => 'required|integer|exists:patients,patient_id',
             'recipient_id' => 'required|integer|exists:users,user_id',
-            'health_center_code' => 'required|string|exists:static_data,code',
             'problem_type_code' => 'required|string|exists:static_data,code',
             'status_code' => 'sometimes|string|exists:static_data,code',
             'transfer_notes' => 'nullable|string',
@@ -330,12 +319,7 @@ class MedicalRecordController extends BaseController
             return $this->sendError('لا يمكن إرسال السجل لنفسك', [], 422);
         }
 
-        // Verify health center exists
-        $healthCenter = StaticData::where('type', 'health_center_type')
-            ->where('code', $request->health_center_code)->first();
-        if (!$healthCenter) {
-            return $this->sendError('نوع المركز الصحي غير صحيح', [], 422);
-        }
+
 
         // Verify problem type exists
         $problemType = StaticData::where('type', 'problem_type')
@@ -356,7 +340,6 @@ class MedicalRecordController extends BaseController
         // Create the medical record
         $record = MedicalRecord::create([
             'patient_id' => $request->patient_id,
-            'health_center_code' => $request->health_center_code,
             'problem_type_code' => $request->problem_type_code,
             'status_code' => $statusCode,
             'created_by' => $user->user_id,
@@ -384,7 +367,7 @@ class MedicalRecordController extends BaseController
         // Real-time broadcasting removed
 
         return $this->sendResponse([
-            'record' => $record->load(['patient', 'healthCenter', 'status', 'problemType', 'creator', 'transfers.recipient']),
+            'record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'creator', 'transfers.recipient']),
             'transfer' => $transfer->load(['medicalRecord.patient', 'sender', 'recipient'])
         ], 'تم إنشاء السجل الطبي ونقله بنجاح', 201);
     }
@@ -402,7 +385,6 @@ class MedicalRecordController extends BaseController
         $this->authorize('update', $record);
 
         $validator = Validator::make($request->all(), [
-            'health_center_code' => 'sometimes|string|exists:static_data,code',
             'problem_type_code' => 'sometimes|string|exists:static_data,code',
             'status_code' => 'sometimes|string|exists:static_data,code',
         ]);
@@ -412,7 +394,6 @@ class MedicalRecordController extends BaseController
         }
 
         // Update fields
-        if ($request->has('health_center_code')) $record->health_center_code = $request->health_center_code;
         if ($request->has('problem_type_code')) $record->problem_type_code = $request->problem_type_code;
         if ($request->has('status_code')) $record->status_code = $request->status_code;
         
@@ -420,7 +401,7 @@ class MedicalRecordController extends BaseController
         $record->save();
 
         return $this->sendResponse(
-            ['record' => $record->load(['patient', 'healthCenter', 'status', 'problemType', 'creator', 'transfers.recipient'])],
+            ['record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'creator', 'transfers.recipient'])],
             'تم تحديث السجل الطبي بنجاح'
         );
     }
@@ -469,10 +450,7 @@ class MedicalRecordController extends BaseController
                 ->select('code', 'label_en', 'label_ar')
                 ->get(),
             
-            'health_centers' => StaticData::where('type', 'health_center_type')
-                ->whereIn('code', $query->distinct()->pluck('health_center_code'))
-                ->select('code', 'label_en', 'label_ar')
-                ->get(),
+
             
             'problem_types' => StaticData::where('type', 'problem_type')
                 ->whereIn('code', $query->distinct()->pluck('problem_type_code'))
@@ -514,9 +492,6 @@ class MedicalRecordController extends BaseController
         if ($request->filled('status_code')) {
             $query->withStatus($request->status_code);
         }
-        if ($request->filled('health_center_code')) {
-            $query->fromHealthCenter($request->health_center_code);
-        }
         if ($request->filled('created_from')) {
             $query->whereDate('created_at', '>=', $request->created_from);
         }
@@ -529,9 +504,7 @@ class MedicalRecordController extends BaseController
             'records_by_status' => $query->selectRaw('status_code, COUNT(*) as count')
                 ->groupBy('status_code')
                 ->get(),
-            'records_by_health_center' => $query->selectRaw('health_center_code, COUNT(*) as count')
-                ->groupBy('health_center_code')
-                ->get(),
+
             'records_by_problem_type' => $query->selectRaw('problem_type_code, COUNT(*) as count')
                 ->groupBy('problem_type_code')
                 ->get(),
@@ -563,8 +536,7 @@ class MedicalRecordController extends BaseController
 
         $user = auth()->user();
         $query = MedicalRecord::with([
-            'patient', 
-            'healthCenter', 
+            'patient.healthCenter', 
             'status', 
             'problemType', 
             'creator', 
@@ -591,7 +563,7 @@ class MedicalRecordController extends BaseController
                 'Record ID' => $record->record_id,
                 'Patient Name' => $record->patient->full_name ?? 'N/A',
                 'Patient National ID' => $record->patient->national_id ?? 'N/A',
-                'Health Center' => $record->healthCenter->label_en ?? 'N/A',
+                'Health Center' => $record->patient->healthCenter->label_en ?? 'N/A',
                 'Status' => $record->status->label_en ?? 'N/A',
                 'Problem Type' => $record->problemType->label_en ?? 'N/A',
                 'Created By' => $record->creator->full_name ?? 'N/A',
@@ -607,7 +579,7 @@ class MedicalRecordController extends BaseController
             'total_records' => $exportData->count(),
             'data' => $exportData,
             'filters_applied' => $request->only([
-                'patient_name', 'patient_national_id', 'status_code', 'health_center_code',
+                'patient_name', 'patient_national_id', 'status_code',
                 'problem_type_code', 'created_from', 'created_to', 'search'
             ])
         ], 'تم تصدير البيانات بنجاح');
@@ -644,9 +616,6 @@ class MedicalRecordController extends BaseController
         if ($request->filled('status_codes')) {
             $statusCodes = is_array($request->status_codes) ? $request->status_codes : explode(',', $request->status_codes);
             $query->whereIn('status_code', $statusCodes);
-        }
-        if ($request->filled('health_center_code')) {
-            $query->fromHealthCenter($request->health_center_code);
         }
         if ($request->filled('problem_type_code')) {
             $query->withProblemType($request->problem_type_code);

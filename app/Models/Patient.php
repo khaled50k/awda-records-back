@@ -35,6 +35,7 @@ class Patient extends Model
         'full_name',
         'national_id',
         'gender_code',
+        'health_center_code',
     ];
 
     /**
@@ -55,6 +56,15 @@ class Patient extends Model
     {
         return $this->belongsTo(StaticData::class, 'gender_code', 'code')
             ->where('type', 'gender');
+    }
+
+    /**
+     * Get the patient's health center information.
+     */
+    public function healthCenter(): BelongsTo
+    {
+        return $this->belongsTo(StaticData::class, 'health_center_code', 'code')
+            ->where('type', 'health_center_type');
     }
 
     /**
@@ -144,7 +154,16 @@ class Patient extends Model
     }
 
     /**
+     * Scope a query to find patients from a specific health center.
+     */
+    public function scopeFromHealthCenter(Builder $query, string $healthCenterCode): void
+    {
+        $query->where('health_center_code', $healthCenterCode);
+    }
+
+    /**
      * Scope a query to find patients with medical records from a specific health center.
+     * @deprecated Use scopeFromHealthCenter instead
      */
     public function scopeWithMedicalRecordsFromHealthCenter(Builder $query, string $healthCenterCode): void
     {
@@ -175,6 +194,22 @@ class Patient extends Model
     public function getGenderLabelArAttribute(): string
     {
         return $this->gender?->label_ar ?? 'غير محدد';
+    }
+
+    /**
+     * Get the patient's health center label.
+     */
+    public function getHealthCenterLabelAttribute(): string
+    {
+        return $this->healthCenter?->label_en ?? 'Unknown';
+    }
+
+    /**
+     * Get the patient's health center label in Arabic.
+     */
+    public function getHealthCenterLabelArAttribute(): string
+    {
+        return $this->healthCenter?->label_ar ?? 'غير محدد';
     }
 
     /**

@@ -21,7 +21,7 @@ class RecordTransferController extends BaseController
         $this->authorize('viewAny', RecordTransfer::class);
 
         $user = auth()->user();
-        $query = RecordTransfer::with(['medicalRecord.patient', 'sender', 'recipient','medicalRecord.healthCenter','medicalRecord.problemType','medicalRecord.status']);
+        $query = RecordTransfer::with(['medicalRecord.patient.healthCenter', 'sender', 'recipient','medicalRecord.problemType','medicalRecord.status']);
 
         // Admin sees all transfers, others only see transfers where they are the recipient
         if (!$user->isAdmin()) {
@@ -63,7 +63,7 @@ class RecordTransferController extends BaseController
     public function show($id)
     {
         $transfer = RecordTransfer::with([
-            'medicalRecord.patient', 'sender', 'recipient', 'medicalRecord.healthCenter','medicalRecord.problemType','medicalRecord.status'
+            'medicalRecord.patient.healthCenter', 'sender', 'recipient','medicalRecord.problemType','medicalRecord.status'
         ])->findOrFail($id);
         
         $this->authorize('view', $transfer);
