@@ -122,10 +122,15 @@ class RecordTransferController extends BaseController
             'transfer_notes' => $request->transfer_notes,
         ]);
 
+        // Get recipient user for notifications
+        $recipient = User::find($request->recipient_id);
+
+        // Broadcast events for notifications
+        event(new \App\Events\TransferCreated($transfer, auth()->user(), $recipient));
+        event(new \App\Events\TransferReceived($transfer, auth()->user(), $recipient));
+
         // Load relationships for notification
         $transfer->load(['medicalRecord.patient', 'medicalRecord.problemType', 'medicalRecord.status', 'sender']);
-
-        // Real-time broadcasting removed
 
         return $this->sendResponse(
             ['transfer' => $transfer->load(['medicalRecord.patient', 'sender', 'recipient'])],

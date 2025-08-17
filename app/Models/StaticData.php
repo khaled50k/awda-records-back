@@ -86,6 +86,23 @@ class StaticData extends Model
         return $this->hasMany(MedicalRecord::class, 'status_code', 'code');
     }
 
+  
+    /**
+     * Get all medical records with this danger level.
+     */
+    public function dangerLevelMedicalRecords(): HasMany
+    {
+        return $this->hasMany(MedicalRecord::class, 'danger_level_code', 'code');
+    }
+
+    /**
+     * Get all medical records with this final status.
+     */
+    public function finalStatusMedicalRecords(): HasMany
+    {
+        return $this->hasMany(MedicalRecord::class, 'final_status_code', 'code');
+    }
+
     /**
      * Get all audit logs with this action type.
      */

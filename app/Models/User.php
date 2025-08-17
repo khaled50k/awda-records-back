@@ -39,7 +39,6 @@ class User extends Authenticatable
         'password_hash',
         'role_code',
         'full_name',
-
         'is_active',
     ];
 
@@ -104,6 +103,14 @@ class User extends Authenticatable
     public function lastModifiedMedicalRecords(): HasMany
     {
         return $this->hasMany(MedicalRecord::class, 'last_modified_by', 'user_id');
+    }
+
+    /**
+     * Get all medical records reviewed by this user.
+     */
+    public function reviewedMedicalRecords(): HasMany
+    {
+        return $this->hasMany(MedicalRecord::class, 'reviewed_party_user_id', 'user_id');
     }
 
     /**

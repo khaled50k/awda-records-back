@@ -53,11 +53,16 @@ class StaticDataSeeder extends Seeder
             ['type' => 'problem_type', 'code' => 'warehouse', 'label_en' => 'Warehouse', 'label_ar' => 'مخازن', 'description' => ''],
             ['type' => 'problem_type', 'code' => 'reports', 'label_en' => 'Reports', 'label_ar' => 'تقارير', 'description' => ''],
 
-                  // Access Types
-            ['type' => 'access_type', 'code' => 'view_ehr', 'label_en' => 'View EHR', 'label_ar' => 'عرض السجل الإلكتروني', 'description' => 'Viewed external EHR'],
-            ['type' => 'access_type', 'code' => 'add_notes_ehr', 'label_en' => 'Add Notes to EHR', 'label_ar' => 'إضافة ملاحظات إلى السجل الإلكتروني', 'description' => 'Added notes to external EHR'],
-            ['type' => 'access_type', 'code' => 'update_status_ehr', 'label_en' => 'Update Status in EHR', 'label_ar' => 'تحديث الحالة في السجل الإلكتروني', 'description' => 'Updated status in external EHR'],
+            // Danger Levels
+            ['type' => 'danger_level', 'code' => 'low', 'label_en' => 'Low Risk', 'label_ar' => 'منخفض', 'description' => ''],
+            ['type' => 'danger_level', 'code' => 'medium', 'label_en' => 'Medium Risk', 'label_ar' => 'متوسط', 'description' => ''],
+            ['type' => 'danger_level', 'code' => 'high', 'label_en' => 'High Risk', 'label_ar' => 'عالي', 'description' => ''],
+            ['type' => 'danger_level', 'code' => 'critical', 'label_en' => 'Critical Risk', 'label_ar' => 'حرج', 'description' => ''],
+            ['type' => 'danger_level', 'code' => 'emergency', 'label_en' => 'Emergency', 'label_ar' => 'طارئ', 'description' => ''],
 
+            // Final Status Types
+            ['type' => 'final_status', 'code' => 'approved', 'label_en' => 'Reviewed', 'label_ar' => 'مدقق عليه', 'description' => 'Medical record reviewed'],
+            ['type' => 'final_status', 'code' => 'rejected', 'label_en' => 'Not Reviewed', 'label_ar' => 'غير مدقق عليه', 'description' => 'Medical record not reviewed'],
              ];
 
         foreach ($staticData as $data) {

@@ -35,6 +35,9 @@ class MedicalRecord extends Model
         'patient_id',
         'status_code',
         'problem_type_code',
+        'danger_level_code',
+        'reviewed_party_user_id',
+        'final_status_code',
         'created_by',
         'last_modified_by',
     ];
@@ -46,6 +49,9 @@ class MedicalRecord extends Model
      */
     protected $casts = [
         'patient_id' => 'integer',
+        'danger_level_code' => 'string',
+        'reviewed_party_user_id' => 'integer',
+        'final_status_code' => 'string',
         'created_by' => 'integer',
         'last_modified_by' => 'integer',
         'created_at' => 'datetime',
@@ -89,6 +95,32 @@ class MedicalRecord extends Model
     {
         return $this->belongsTo(StaticData::class, 'problem_type_code', 'code')
             ->where('type', 'problem_type');
+    }
+
+    /**
+     * Get the danger level information.
+     */
+    public function dangerLevel(): BelongsTo
+    {
+        return $this->belongsTo(StaticData::class, 'danger_level_code', 'code')
+            ->where('type', 'danger_level');
+    }
+
+    /**
+     * Get the user who reviewed this medical record.
+     */
+    public function reviewedPartyUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_party_user_id', 'user_id');
+    }
+
+    /**
+     * Get the final status information.
+     */
+    public function finalStatus(): BelongsTo
+    {
+        return $this->belongsTo(StaticData::class, 'final_status_code', 'code')
+            ->where('type', 'final_status');
     }
 
     /**
@@ -148,6 +180,30 @@ class MedicalRecord extends Model
     public function scopeWithProblemType(Builder $query, string $problemTypeCode): void
     {
         $query->where('problem_type_code', $problemTypeCode);
+    }
+
+    /**
+     * Scope a query to only include medical records with a specific danger level.
+     */
+    public function scopeWithDangerLevel(Builder $query, string $dangerLevelCode): void
+    {
+        $query->where('danger_level_code', $dangerLevelCode);
+    }
+
+    /**
+     * Scope a query to only include medical records reviewed by a specific user.
+     */
+    public function scopeReviewedBy(Builder $query, int $userId): void
+    {
+        $query->where('reviewed_party_user_id', $userId);
+    }
+
+    /**
+     * Scope a query to only include medical records with a specific final status.
+     */
+    public function scopeWithFinalStatus(Builder $query, string $finalStatusCode): void
+    {
+        $query->where('final_status_code', $finalStatusCode);
     }
 
     /**

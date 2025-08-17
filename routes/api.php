@@ -90,6 +90,128 @@ Route::middleware('auth:sanctum')->group(function () {
 		Route::get('static-data/type/{type}', 'getByType');
 		Route::get('static-data/type/{type}/code/{code}', 'getByCode');
 	});
+
+	// Test broadcasting routes (for development/testing)
+	Route::post('test/broadcast', function () {
+		// Test admin notification
+		event(new \App\Events\MedicalRecordCreated(
+			\App\Models\MedicalRecord::first() ?? new \App\Models\MedicalRecord(['record_id' => 1]),
+			auth()->user()
+		));
+		
+		return response()->json(['message' => 'Test event broadcasted successfully']);
+	});
+
+	// Broadcasting authentication route
+	Route::post('broadcasting/auth', function (Request $request) {
+		// Debug the entire request to see what's coming in
+		\Log::info('Broadcasting auth request debug', [
+			'method' => $request->method(),
+			'url' => $request->url(),
+			'headers' => $request->headers->all(),
+			'content_type' => $request->header('Content-Type'),
+			'raw_body' => $request->getContent(),
+			'input_data' => $request->all(),
+			'post_data' => $request->post(),
+			'query_params' => $request->query()
+		]);
+		
+		// Get the channel name and socket ID from form data
+		$channelName = $request->input('channel_name');
+		$socketId = $request->input('socket_id');
+		
+		// Check if user is authenticated
+		if (!auth()->check()) {
+			return response()->json(['message' => 'Unauthenticated'], 403);
+		}
+		
+		$user = auth()->user();
+		
+		// Debug logging
+		\Log::info('Broadcasting auth attempt', [
+			'user_id' => $user->user_id,
+			'username' => $user->username,
+			'role_code' => $user->role_code,
+			'is_active' => $user->is_active,
+			'channel_name' => $channelName,
+			'socket_id' => $socketId,
+			'isAdmin' => $user->isAdmin()
+		]);
+		
+		// Check channel authorization based on our rules
+		$canAccess = false;
+		
+		if ($channelName === 'admin.notifications') {
+			$canAccess = $user->isAdmin();
+		} elseif (str_starts_with($channelName, 'user.')) {
+			$userId = explode('.', $channelName)[1];
+			$canAccess = (int) $user->user_id === (int) $userId;
+		}
+		
+		if (!$canAccess) {
+			return response()->json([
+				'message' => 'Unauthorized',
+				'debug' => [
+					'user_id' => $user->user_id,
+					'role_code' => $user->role_code,
+					'isAdmin' => $user->isAdmin(),
+					'channel' => $channelName,
+					'socket_id' => $socketId,
+					'request_data' => $request->all()
+				]
+			], 403);
+		}
+		
+		// Generate Pusher auth response
+		$pusher = new \Pusher\Pusher(
+			env('PUSHER_APP_KEY'),
+			env('PUSHER_APP_SECRET'),
+			env('PUSHER_APP_ID'),
+			[
+				'cluster' => env('PUSHER_APP_CLUSTER'),
+				'useTLS' => true
+			]
+		);
+		
+		$auth = $pusher->socket_auth($channelName, $socketId);
+		
+		return response($auth);
+	});
+});
+
+// Test Pusher connection
+Route::post('test/pusher-connection', function () {
+    try {
+        $pusher = new \Pusher\Pusher(
+            env('PUSHER_APP_KEY'),
+            env('PUSHER_APP_SECRET'),
+            env('PUSHER_APP_ID'),
+            [
+                'cluster' => env('PUSHER_APP_CLUSTER'),
+                'useTLS' => true,
+                'curl_options' => [
+                    CURLOPT_SSL_VERIFYHOST => 0,
+                    CURLOPT_SSL_VERIFYPEER => 0,
+                ],
+            ]
+        );
+        
+        // Test the connection
+        $response = $pusher->get('/channels');
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Pusher connection successful',
+            'channels' => $response
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Pusher connection failed',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
 });
 
 //

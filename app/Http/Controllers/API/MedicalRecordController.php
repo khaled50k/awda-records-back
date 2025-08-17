@@ -28,6 +28,9 @@ class MedicalRecordController extends BaseController
             'patient.healthCenter', 
             'status', 
             'problemType', 
+            'dangerLevel',
+            'reviewedPartyUser',
+            'finalStatus',
             'creator', 
             'lastModifier',
             'transfers.recipient',
@@ -93,6 +96,36 @@ class MedicalRecordController extends BaseController
         if ($request->filled('problem_type_codes')) {
             $problemTypeCodes = is_array($request->problem_type_codes) ? $request->problem_type_codes : explode(',', $request->problem_type_codes);
             $query->whereIn('problem_type_code', $problemTypeCodes);
+        }
+
+        // Filter by danger level
+        if ($request->filled('danger_level_code')) {
+            $query->withDangerLevel($request->danger_level_code);
+        }
+
+        // Filter by multiple danger levels
+        if ($request->filled('danger_level_codes')) {
+            $dangerLevelCodes = is_array($request->danger_level_codes) ? $request->danger_level_codes : explode(',', $request->danger_level_codes);
+            $query->whereIn('danger_level_code', $dangerLevelCodes);
+        }
+
+        // Filter by reviewed party user
+        if ($request->filled('reviewed_party_user_id')) {
+            $query->reviewedBy($request->reviewed_party_user_id);
+        }
+        if ($request->filled('final_status_code')) {
+            $query->withFinalStatus($request->final_status_code);
+        }
+
+        // Filter by final status
+        if ($request->filled('final_status_code')) {
+            $query->withFinalStatus($request->final_status_code);
+        }
+
+        // Filter by multiple final statuses
+        if ($request->filled('final_status_codes')) {
+            $finalStatusCodes = is_array($request->final_status_codes) ? $request->final_status_codes : explode(',', $request->final_status_codes);
+            $query->whereIn('final_status_code', $finalStatusCodes);
         }
 
         // ===== DATE RANGE FILTERS =====
@@ -214,7 +247,7 @@ class MedicalRecordController extends BaseController
         // Validate sort fields
         $allowedSortFields = [
             'created_at', 'updated_at', 'patient_id', 'status_code', 
-            'problem_type_code'
+            'problem_type_code', 'danger_level_code', 'reviewed_party_user_id', 'final_status_code'
         ];
         
         if (in_array($sortBy, $allowedSortFields)) {
@@ -233,11 +266,12 @@ class MedicalRecordController extends BaseController
         $filters = $request->only([
             'patient_name', 'patient_national_id', 'patient_gender',
             'status_code', 'status_codes',
-            'problem_type_code', 'problem_type_codes', 'created_from', 'created_to',
-            'modified_from', 'modified_to', 'date', 'created_by', 'last_modified_by',
-            'has_transfers', 'transfer_sender_id', 'transfer_recipient_id',
-            'transfer_from', 'transfer_to', 'transfer_notes', 'workflow_step_status',
-            'has_completed_workflow', 'search', 'sort_by', 'sort_order'
+            'problem_type_code', 'problem_type_codes', 'danger_level_code', 'danger_level_codes', 'reviewed_party_user_id',
+            'final_status_code', 'final_status_codes',
+            'created_from', 'created_to', 'modified_from', 'modified_to', 'date', 
+            'created_by', 'last_modified_by', 'has_transfers', 'transfer_sender_id', 
+            'transfer_recipient_id', 'transfer_from', 'transfer_to', 'transfer_notes', 
+            'workflow_step_status', 'has_completed_workflow', 'search', 'sort_by', 'sort_order'
         ]);
         
         // Remove empty filters
@@ -271,7 +305,7 @@ class MedicalRecordController extends BaseController
     public function show($id)
     {
         $record = MedicalRecord::with([
-            'patient.healthCenter', 'status', 'problemType', 'creator', 'lastModifier', 'transfers.recipient','transfers.sender'
+            'patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'reviewedPartyUser', 'finalStatus', 'creator', 'lastModifier', 'transfers.recipient','transfers.sender'
         ])->findOrFail($id);
         
         $this->authorize('view', $record);
@@ -293,6 +327,8 @@ class MedicalRecordController extends BaseController
             'patient_id' => 'required|integer|exists:patients,patient_id',
             'recipient_id' => 'required|integer|exists:users,user_id',
             'problem_type_code' => 'required|string|exists:static_data,code',
+            'danger_level_code' => 'nullable|string|exists:static_data,code',
+            'reviewed_party_user_id' => 'nullable|integer|exists:users,user_id',
             'status_code' => 'sometimes|string|exists:static_data,code',
             'transfer_notes' => 'nullable|string',
         ]);
@@ -341,10 +377,15 @@ class MedicalRecordController extends BaseController
         $record = MedicalRecord::create([
             'patient_id' => $request->patient_id,
             'problem_type_code' => $request->problem_type_code,
+            'danger_level_code' => $request->danger_level_code,
+            'reviewed_party_user_id' => $request->reviewed_party_user_id,
             'status_code' => $statusCode,
             'created_by' => $user->user_id,
             'last_modified_by' => $user->user_id,
         ]);
+
+        // Broadcast event for admin notifications
+        event(new \App\Events\MedicalRecordCreated($record, $user));
 
         // Check if record is already in transfer (since we removed status tracking, just check if any transfer exists)
         $existingTransfer = RecordTransfer::where('record_id', $record->record_id)->first();
@@ -367,7 +408,7 @@ class MedicalRecordController extends BaseController
         // Real-time broadcasting removed
 
         return $this->sendResponse([
-            'record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'creator', 'transfers.recipient']),
+            'record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'reviewedPartyUser', 'finalStatus', 'creator', 'transfers.recipient']),
             'transfer' => $transfer->load(['medicalRecord.patient', 'sender', 'recipient'])
         ], 'تم إنشاء السجل الطبي ونقله بنجاح', 201);
     }
@@ -386,6 +427,9 @@ class MedicalRecordController extends BaseController
 
         $validator = Validator::make($request->all(), [
             'problem_type_code' => 'sometimes|string|exists:static_data,code',
+            'danger_level_code' => 'sometimes|string|exists:static_data,code',
+            'reviewed_party_user_id' => 'sometimes|integer|exists:users,user_id',
+            'final_status_code' => 'sometimes|string|exists:static_data,code',
             'status_code' => 'sometimes|string|exists:static_data,code',
         ]);
 
@@ -395,13 +439,16 @@ class MedicalRecordController extends BaseController
 
         // Update fields
         if ($request->has('problem_type_code')) $record->problem_type_code = $request->problem_type_code;
+        if ($request->has('danger_level_code')) $record->danger_level_code = $request->danger_level_code;
+        if ($request->has('reviewed_party_user_id')) $record->reviewed_party_user_id = $request->reviewed_party_user_id;
+        if ($request->has('final_status_code')) $record->final_status_code = $request->final_status_code;
         if ($request->has('status_code')) $record->status_code = $request->status_code;
         
         $record->last_modified_by = auth()->user()->user_id;
         $record->save();
 
         return $this->sendResponse(
-            ['record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'creator', 'transfers.recipient'])],
+            ['record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'reviewedPartyUser', 'finalStatus', 'creator', 'transfers.recipient'])],
             'تم تحديث السجل الطبي بنجاح'
         );
     }
@@ -450,10 +497,18 @@ class MedicalRecordController extends BaseController
                 ->select('code', 'label_en', 'label_ar')
                 ->get(),
             
-
-            
             'problem_types' => StaticData::where('type', 'problem_type')
                 ->whereIn('code', $query->distinct()->pluck('problem_type_code'))
+                ->select('code', 'label_en', 'label_ar')
+                ->get(),
+            
+            'danger_levels' => StaticData::where('type', 'danger_level')
+                ->whereIn('code', $query->distinct()->pluck('danger_level_code'))
+                ->select('code', 'label_en', 'label_ar')
+                ->get(),
+            
+            'final_statuses' => StaticData::where('type', 'final_status')
+                ->whereIn('code', $query->distinct()->pluck('final_status_code'))
                 ->select('code', 'label_en', 'label_ar')
                 ->get(),
             
@@ -508,6 +563,15 @@ class MedicalRecordController extends BaseController
             'records_by_problem_type' => $query->selectRaw('problem_type_code, COUNT(*) as count')
                 ->groupBy('problem_type_code')
                 ->get(),
+            
+            'records_by_danger_level' => $query->selectRaw('danger_level_code, COUNT(*) as count')
+                ->groupBy('danger_level_code')
+                ->get(),
+            
+            'records_by_final_status' => $query->selectRaw('final_status_code, COUNT(*) as count')
+                ->groupBy('final_status_code')
+                ->get(),
+            
             'records_with_transfers' => $query->hasTransfers()->count(),
             'records_without_transfers' => $query->noTransfers()->count(),
             'records_created_today' => $query->createdOn(now()->toDateString())->count(),
@@ -539,6 +603,9 @@ class MedicalRecordController extends BaseController
             'patient.healthCenter', 
             'status', 
             'problemType', 
+            'dangerLevel',
+            'reviewedPartyUser',
+            'finalStatus',
             'creator', 
             'lastModifier',
             'transfers.recipient',
@@ -566,6 +633,9 @@ class MedicalRecordController extends BaseController
                 'Health Center' => $record->patient->healthCenter->label_en ?? 'N/A',
                 'Status' => $record->status->label_en ?? 'N/A',
                 'Problem Type' => $record->problemType->label_en ?? 'N/A',
+                'Danger Level' => $record->dangerLevel->label_en ?? 'N/A',
+                'Reviewed By' => $record->reviewedPartyUser->full_name ?? 'N/A',
+                'Final Status' => $record->finalStatus->label_en ?? 'N/A',
                 'Created By' => $record->creator->full_name ?? 'N/A',
                 'Created At' => $record->created_at->format('Y-m-d H:i:s'),
                 'Last Modified By' => $record->lastModifier->full_name ?? 'N/A',
@@ -580,7 +650,7 @@ class MedicalRecordController extends BaseController
             'data' => $exportData,
             'filters_applied' => $request->only([
                 'patient_name', 'patient_national_id', 'status_code',
-                'problem_type_code', 'created_from', 'created_to', 'search'
+                'problem_type_code', 'danger_level_code', 'reviewed_party_user_id', 'final_status_code', 'created_from', 'created_to', 'search'
             ])
         ], 'تم تصدير البيانات بنجاح');
     }
@@ -619,6 +689,12 @@ class MedicalRecordController extends BaseController
         }
         if ($request->filled('problem_type_code')) {
             $query->withProblemType($request->problem_type_code);
+        }
+        if ($request->filled('danger_level_code')) {
+            $query->withDangerLevel($request->danger_level_code);
+        }
+        if ($request->filled('reviewed_party_user_id')) {
+            $query->reviewedBy($request->reviewed_party_user_id);
         }
 
         // Date filters

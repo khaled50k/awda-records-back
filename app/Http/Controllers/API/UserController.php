@@ -33,7 +33,7 @@ class UserController extends BaseController
      */
     public function show($id)
     {
-        $user = User::with('role')->findOrFail($id);
+        $user = User::with('role','reviewedMedicalRecords')->findOrFail($id);
         $this->authorize('view', $user);
         
         return $this->sendResponse($user, 'تم جلب بيانات المستخدم بنجاح');
