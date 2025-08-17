@@ -99,7 +99,7 @@ class UserController extends BaseController
         $validator = Validator::make($request->all(), [
             'username' => 'sometimes|string|max:50|unique:users,username,' . $id . ',user_id',
             'email' => 'nullable|string|email|max:255|unique:users,email,' . $id . ',user_id',
-            'password' => 'sometimes|string|min:8',
+            'password' => 'filled|string|min:8',
             'full_name' => 'sometimes|string|max:100',
             'role_code' => 'sometimes|string|exists:static_data,code',
             'is_active' => 'sometimes|boolean',

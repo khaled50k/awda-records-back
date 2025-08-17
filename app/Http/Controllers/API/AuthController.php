@@ -140,7 +140,7 @@ class AuthController extends BaseController
         $validator = Validator::make($request->all(), [
             'full_name' => 'sometimes|string|max:100',
             'email' => 'sometimes|string|email|max:255|unique:users,email,' . $user->user_id . ',user_id',
-            'password' => 'sometimes|string|min:8',
+            'password' => 'filled|string|min:8',
         ]);
 
         if ($validator->fails()) {
