@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Patient;
 use App\Models\StaticData;
+use Illuminate\Support\Facades\DB;
 
 class PatientController extends BaseController
 {
@@ -37,6 +38,10 @@ class PatientController extends BaseController
             $query->fromHealthCenter($request->health_center_code);
         }
 
+        // Filter to show only today's patients for fresh data
+        // This ensures users always see the most recent and relevant data
+        // $query->whereDate('created_at', today());
+        $query->orderBy('created_at', 'desc');
         $patients = $query->paginate(15);
         
         return $this->sendResponse($patients, 'تم جلب قائمة المرضى بنجاح');
@@ -71,6 +76,18 @@ class PatientController extends BaseController
             'national_id' => 'required|integer|unique:patients',
             'gender_code' => 'required|string|exists:static_data,code',
             'health_center_code' => 'nullable|string|exists:static_data,code',
+        ], [
+            'full_name.required' => 'الاسم الكامل مطلوب',
+            'full_name.string' => 'الاسم الكامل يجب أن يكون نصاً',
+            'full_name.max' => 'الاسم الكامل يجب ألا يتجاوز 100 حرف',
+            'national_id.required' => 'الرقم القومي مطلوب',
+            'national_id.integer' => 'الرقم القومي يجب أن يكون رقماً صحيحاً',
+            'national_id.unique' => 'الرقم القومي مستخدم بالفعل',
+            'gender_code.required' => 'نوع الجنس مطلوب',
+            'gender_code.string' => 'نوع الجنس يجب أن يكون نصاً',
+            'gender_code.exists' => 'نوع الجنس غير موجود',
+            'health_center_code.string' => 'رمز المركز الصحي يجب أن يكون نصاً',
+            'health_center_code.exists' => 'رمز المركز الصحي غير موجود',
         ]);
 
         if ($validator->fails()) {
@@ -83,13 +100,22 @@ class PatientController extends BaseController
             return $this->sendError('نوع الجنس غير صحيح', [], 422);
         }
 
-  
-        $patient = Patient::create([
-            'full_name' => $request->full_name,
-            'national_id' => $request->national_id,
-            'gender_code' => $request->gender_code,
-            'health_center_code' => $request->health_center_code,
-        ]);
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            $patient = Patient::create([
+                'full_name' => $request->full_name,
+                'national_id' => $request->national_id,
+                'gender_code' => $request->gender_code,
+                'health_center_code' => $request->health_center_code,
+            ]);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء إنشاء المريض', [], 500);
+        }
 
         return $this->sendResponse(
             ['patient' => $patient->load(['gender', 'healthCenter'])],
@@ -115,19 +141,38 @@ class PatientController extends BaseController
             'national_id' => 'sometimes|integer|unique:patients,national_id,' . $id . ',patient_id',
             'gender_code' => 'sometimes|string|exists:static_data,code',
             'health_center_code' => 'sometimes|string|exists:static_data,code',
+        ], [
+            'full_name.string' => 'الاسم الكامل يجب أن يكون نصاً',
+            'full_name.max' => 'الاسم الكامل يجب ألا يتجاوز 100 حرف',
+            'national_id.integer' => 'الرقم القومي يجب أن يكون رقماً صحيحاً',
+            'national_id.unique' => 'الرقم القومي مستخدم بالفعل',
+            'gender_code.string' => 'نوع الجنس يجب أن يكون نصاً',
+            'gender_code.exists' => 'نوع الجنس غير موجود',
+            'health_center_code.string' => 'رمز المركز الصحي يجب أن يكون نصاً',
+            'health_center_code.exists' => 'رمز المركز الصحي غير موجود',
         ]);
 
         if ($validator->fails()) {
             return $this->sendError('بيانات غير صحيحة', $validator->errors(), 422);
         }
 
-        // Update fields
-        if ($request->has('full_name')) $patient->full_name = $request->full_name;
-        if ($request->has('national_id')) $patient->national_id = $request->national_id;
-        if ($request->has('gender_code')) $patient->gender_code = $request->gender_code;
-        if ($request->has('health_center_code')) $patient->health_center_code = $request->health_center_code;
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
 
-        $patient->save();
+            // Update fields
+            if ($request->has('full_name')) $patient->full_name = $request->full_name;
+            if ($request->has('national_id')) $patient->national_id = $request->national_id;
+            if ($request->has('gender_code')) $patient->gender_code = $request->gender_code;
+            if ($request->has('health_center_code')) $patient->health_center_code = $request->health_center_code;
+
+            $patient->save();
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء تحديث بيانات المريض', [], 500);
+        }
 
         return $this->sendResponse(
             ['patient' => $patient->load(['gender', 'healthCenter'])],
@@ -151,7 +196,17 @@ class PatientController extends BaseController
             return $this->sendError('لا يمكن حذف المريض لوجود سجلات طبية مرتبطة به', [], 422);
         }
 
-        $patient->delete();
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            $patient->delete();
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء حذف المريض', [], 500);
+        }
 
         return $this->sendResponse([], 'تم حذف المريض بنجاح');
     }

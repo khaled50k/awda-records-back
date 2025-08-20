@@ -4,12 +4,16 @@ namespace App\Http\Controllers\API;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use App\Models\MedicalRecord;
 use App\Models\Patient;
 use App\Models\StaticData;
 use App\Models\User;
 use App\Models\RecordTransfer;
+use App\Events\TransferCreated;
+use App\Events\TransferReceived;
 use Illuminate\Database\Eloquent\Builder; // Added for applyFilters
+use Illuminate\Support\Facades\DB;
 
 class MedicalRecordController extends BaseController
 {
@@ -25,13 +29,12 @@ class MedicalRecordController extends BaseController
 
         $user = auth()->user();
         $query = MedicalRecord::with([
-            'patient.healthCenter', 
-            'status', 
-            'problemType', 
+            'patient.healthCenter',
+            'status',
+            'problemType',
             'dangerLevel',
-            'reviewedPartyUser',
-            'finalStatus',
-            'creator', 
+            'transferStatus',
+            'creator',
             'lastModifier',
             'transfers.recipient',
             'transfers.sender',
@@ -40,9 +43,9 @@ class MedicalRecordController extends BaseController
 
         // Base authorization - Admin sees all records, others only see records they created or modified
         if (!$user->isAdmin()) {
-            $query->where(function($q) use ($user) {
+            $query->where(function ($q) use ($user) {
                 $q->where('created_by', $user->user_id)
-                  ->orWhere('last_modified_by', $user->user_id);
+                    ->orWhere('last_modified_by', $user->user_id);
             });
         }
 
@@ -54,21 +57,21 @@ class MedicalRecordController extends BaseController
 
         // Filter by patient full name (partial match)
         if ($request->filled('patient_name')) {
-            $query->whereHas('patient', function($q) use ($request) {
+            $query->whereHas('patient', function ($q) use ($request) {
                 $q->where('full_name', 'like', '%' . $request->patient_name . '%');
             });
         }
 
         // Filter by patient national ID (partial match)
         if ($request->filled('patient_national_id')) {
-            $query->whereHas('patient', function($q) use ($request) {
+            $query->whereHas('patient', function ($q) use ($request) {
                 $q->where('national_id', 'like', '%' . $request->patient_national_id . '%');
             });
         }
 
         // Filter by patient gender
         if ($request->filled('patient_gender')) {
-            $query->whereHas('patient', function($q) use ($request) {
+            $query->whereHas('patient', function ($q) use ($request) {
                 $q->where('gender_code', $request->patient_gender);
             });
         }
@@ -117,24 +120,30 @@ class MedicalRecordController extends BaseController
             $query->withFinalStatus($request->final_status_code);
         }
 
-        // Filter by final status
-        if ($request->filled('final_status_code')) {
-            $query->withFinalStatus($request->final_status_code);
+        // Filter by transfer status
+        if ($request->filled('transfer_status_code')) {
+            $query->withTransferStatus($request->transfer_status_code);
         }
 
-        // Filter by multiple final statuses
-        if ($request->filled('final_status_codes')) {
-            $finalStatusCodes = is_array($request->final_status_codes) ? $request->final_status_codes : explode(',', $request->final_status_codes);
-            $query->whereIn('final_status_code', $finalStatusCodes);
+        // Filter by multiple transfer statuses
+        if ($request->filled('transfer_status_codes')) {
+            $transferStatusCodes = is_array($request->transfer_status_codes) ? $request->transfer_status_codes : explode(',', $request->transfer_status_codes);
+            $query->whereIn('transfer_status_code', $transferStatusCodes);
         }
 
         // ===== DATE RANGE FILTERS =====
         // Filter by creation date range
-        if ($request->filled('created_from')) {
-            $query->whereDate('created_at', '>=', $request->created_from);
-        }
-        if ($request->filled('created_to')) {
-            $query->whereDate('created_at', '<=', $request->created_to);
+        if ($request->filled('created_from') || $request->filled('created_to')) {
+            // If date range is provided, use it
+            if ($request->filled('created_from')) {
+                $query->whereDate('created_at', '>=', $request->created_from);
+            }
+            if ($request->filled('created_to')) {
+                $query->whereDate('created_at', '<=', $request->created_to);
+            }
+        } else {
+            // If no date range is provided, show only today's records
+            $query->whereDate('created_at', today());
         }
 
         // Filter by last modification date range
@@ -173,33 +182,33 @@ class MedicalRecordController extends BaseController
 
         // Filter by transfer sender
         if ($request->filled('transfer_sender_id')) {
-            $query->whereHas('transfers', function($q) use ($request) {
+            $query->whereHas('transfers', function ($q) use ($request) {
                 $q->where('sender_id', $request->transfer_sender_id);
             });
         }
 
         // Filter by transfer recipient
         if ($request->filled('transfer_recipient_id')) {
-            $query->whereHas('transfers', function($q) use ($request) {
+            $query->whereHas('transfers', function ($q) use ($request) {
                 $q->where('recipient_id', $request->transfer_recipient_id);
             });
         }
 
         // Filter by transfer date range
         if ($request->filled('transfer_from')) {
-            $query->whereHas('transfers', function($q) use ($request) {
+            $query->whereHas('transfers', function ($q) use ($request) {
                 $q->whereDate('created_at', '>=', $request->transfer_from);
             });
         }
         if ($request->filled('transfer_to')) {
-            $query->whereHas('transfers', function($q) use ($request) {
+            $query->whereHas('transfers', function ($q) use ($request) {
                 $q->whereDate('created_at', '<=', $request->transfer_to);
             });
         }
 
         // Filter by transfer notes content
         if ($request->filled('transfer_notes')) {
-            $query->whereHas('transfers', function($q) use ($request) {
+            $query->whereHas('transfers', function ($q) use ($request) {
                 $q->where('transfer_notes', 'like', '%' . $request->transfer_notes . '%');
             });
         }
@@ -207,7 +216,7 @@ class MedicalRecordController extends BaseController
         // ===== ADVANCED FILTERS =====
         // Filter by workflow step status
         if ($request->filled('workflow_step_status')) {
-            $query->whereHas('transfers.workflowSteps', function($q) use ($request) {
+            $query->whereHas('transfers.workflowSteps', function ($q) use ($request) {
                 $q->where('step_status_code', $request->workflow_step_status);
             });
         }
@@ -215,11 +224,11 @@ class MedicalRecordController extends BaseController
         // Filter by completed workflow steps
         if ($request->filled('has_completed_workflow')) {
             if ($request->has_completed_workflow === 'true' || $request->has_completed_workflow === true) {
-                $query->whereHas('transfers.workflowSteps', function($q) {
+                $query->whereHas('transfers.workflowSteps', function ($q) {
                     $q->whereNotNull('completed_at');
                 });
             } else {
-                $query->whereHas('transfers.workflowSteps', function($q) {
+                $query->whereHas('transfers.workflowSteps', function ($q) {
                     $q->whereNull('completed_at');
                 });
             }
@@ -229,27 +238,33 @@ class MedicalRecordController extends BaseController
         // Global search across patient name, national ID, and transfer notes
         if ($request->filled('search')) {
             $searchTerm = $request->search;
-            $query->where(function($q) use ($searchTerm) {
-                $q->whereHas('patient', function($patientQuery) use ($searchTerm) {
+            $query->where(function ($q) use ($searchTerm) {
+                $q->whereHas('patient', function ($patientQuery) use ($searchTerm) {
                     $patientQuery->where('full_name', 'like', '%' . $searchTerm . '%')
-                                ->orWhere('national_id', 'like', '%' . $searchTerm . '%');
+                        ->orWhere('national_id', 'like', '%' . $searchTerm . '%');
                 })
-                ->orWhereHas('transfers', function($transferQuery) use ($searchTerm) {
-                    $transferQuery->where('transfer_notes', 'like', '%' . $searchTerm . '%');
-                });
+                    ->orWhereHas('transfers', function ($transferQuery) use ($searchTerm) {
+                        $transferQuery->where('transfer_notes', 'like', '%' . $searchTerm . '%');
+                    });
             });
         }
 
         // ===== SORTING =====
         $sortBy = $request->get('sort_by', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
-        
+
         // Validate sort fields
         $allowedSortFields = [
-            'created_at', 'updated_at', 'patient_id', 'status_code', 
-            'problem_type_code', 'danger_level_code', 'reviewed_party_user_id', 'final_status_code'
+            'created_at',
+            'updated_at',
+            'patient_id',
+            'status_code',
+            'problem_type_code',
+            'danger_level_code',
+            'reviewed_party_user_id',
+            'final_status_code'
         ];
-        
+
         if (in_array($sortBy, $allowedSortFields)) {
             $query->orderBy($sortBy, $sortOrder);
         } else {
@@ -259,26 +274,48 @@ class MedicalRecordController extends BaseController
         // ===== PAGINATION =====
         $perPage = $request->get('per_page', 15);
         $perPage = min(max($perPage, 1), 100); // Limit between 1 and 100
-        
+
         $records = $query->paginate($perPage);
-        
+
         // Add filter summary to response
         $filters = $request->only([
-            'patient_name', 'patient_national_id', 'patient_gender',
-            'status_code', 'status_codes',
-            'problem_type_code', 'problem_type_codes', 'danger_level_code', 'danger_level_codes', 'reviewed_party_user_id',
-            'final_status_code', 'final_status_codes',
-            'created_from', 'created_to', 'modified_from', 'modified_to', 'date', 
-            'created_by', 'last_modified_by', 'has_transfers', 'transfer_sender_id', 
-            'transfer_recipient_id', 'transfer_from', 'transfer_to', 'transfer_notes', 
-            'workflow_step_status', 'has_completed_workflow', 'search', 'sort_by', 'sort_order'
+            'patient_name',
+            'patient_national_id',
+            'patient_gender',
+            'status_code',
+            'status_codes',
+            'problem_type_code',
+            'problem_type_codes',
+            'danger_level_code',
+            'danger_level_codes',
+            'reviewed_party_user_id',
+            'transfer_status_code',
+            'transfer_status_codes',
+            'created_from',
+            'created_to',
+            'modified_from',
+            'modified_to',
+            'date',
+            'created_by',
+            'last_modified_by',
+            'has_transfers',
+            'transfer_sender_id',
+            'transfer_recipient_id',
+            'transfer_from',
+            'transfer_to',
+            'transfer_notes',
+            'workflow_step_status',
+            'has_completed_workflow',
+            'search',
+            'sort_by',
+            'sort_order'
         ]);
-        
+
         // Remove empty filters
-        $filters = array_filter($filters, function($value) {
+        $filters = array_filter($filters, function ($value) {
             return $value !== null && $value !== '';
         });
-        
+
         $response = [
             'data' => $records->items(),
             'pagination' => [
@@ -292,7 +329,7 @@ class MedicalRecordController extends BaseController
             'filters_applied' => $filters,
             'total_filtered' => $records->total()
         ];
-        
+
         return $this->sendResponse($response, 'تم جلب قائمة السجلات الطبية بنجاح');
     }
 
@@ -305,11 +342,37 @@ class MedicalRecordController extends BaseController
     public function show($id)
     {
         $record = MedicalRecord::with([
-            'patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'reviewedPartyUser', 'finalStatus', 'creator', 'lastModifier', 'transfers.recipient','transfers.sender'
+            'patient.healthCenter',
+            'status',
+            'problemType',
+            'dangerLevel',
+            'transferStatus',
+            'creator',
+            'lastModifier'
         ])->findOrFail($id);
-        
+
         $this->authorize('view', $record);
+
+        $user = auth()->user();
         
+        // If user is admin, load all transfers
+        // If user is employee and created this record, load only their last sent transfer
+        if ($user->isAdmin()) {
+            $record->load(['transfers.recipient', 'transfers.sender']);
+        } else if ($record->created_by === $user->user_id) {
+            // Load only the last transfer sent by this user
+            $record->load(['transfers' => function($query) use ($user) {
+                $query->where('sender_id', $user->user_id)
+                      ->orderBy('created_at', 'desc')
+                      ->limit(1);
+            }, 'transfers.recipient', 'transfers.sender']);
+        } else {
+            // For other users, load transfers where they are the recipient
+            $record->load(['transfers' => function($query) use ($user) {
+                $query->where('recipient_id', $user->user_id);
+            }, 'transfers.recipient', 'transfers.sender']);
+        }
+
         return $this->sendResponse($record, 'تم جلب بيانات السجل الطبي بنجاح');
     }
 
@@ -325,13 +388,38 @@ class MedicalRecordController extends BaseController
 
         $validator = Validator::make($request->all(), [
             'patient_id' => 'required|integer|exists:patients,patient_id',
-            'recipient_id' => 'required|integer|exists:users,user_id',
             'problem_type_code' => 'required|string|exists:static_data,code',
-            'danger_level_code' => 'nullable|string|exists:static_data,code',
-            'reviewed_party_user_id' => 'nullable|integer|exists:users,user_id',
-            'status_code' => 'sometimes|string|exists:static_data,code',
-            'transfer_notes' => 'nullable|string',
+            'danger_level_code' => 'required|string|exists:static_data,code',
+            'reviewed_party' => 'required|string|max:50',
+            'status_code' => 'required|string|exists:static_data,code',
+            'recipient_id' => 'nullable|integer|exists:users,user_id', // Optional recipient for immediate transfer , shows only for admin
+            'transfer_notes' => 'required|string', // Optional transfer notes
+        ], [
+            'patient_id.required' => 'معرف المريض مطلوب',
+            'patient_id.integer' => 'معرف المريض يجب أن يكون رقماً صحيحاً',
+            'patient_id.exists' => 'معرف المريض غير موجود',
+            'problem_type_code.required' => 'نوع المشكلة مطلوب',
+            'problem_type_code.string' => 'نوع المشكلة يجب أن يكون نصاً',
+            'problem_type_code.exists' => 'نوع المشكلة غير موجود',
+            'danger_level_code.required' => 'مستوى الخطر مطلوب',
+            'danger_level_code.string' => 'مستوى الخطر يجب أن يكون نصاً',
+            'danger_level_code.exists' => 'مستوى الخطر غير موجود',
+            'reviewed_party.required' => 'الطرف المراجع مطلوب',
+            'reviewed_party.string' => 'الطرف المراجع يجب أن يكون نصاً',
+            'reviewed_party.max' => 'الطرف المراجع يجب ألا يتجاوز 50 حرف',
+            'status_code.required' => 'الحالة مطلوبة',
+            'status_code.string' => 'رمز الحالة يجب أن يكون نصاً',
+            'status_code.exists' => 'رمز الحالة غير موجود',
+            'recipient_id.integer' => 'معرف المستلم يجب أن يكون رقماً صحيحاً',
+            'recipient_id.exists' => 'معرف المستلم غير موجود',
+            'transfer_notes.string' => 'ملاحظات النقل يجب أن تكون نصاً',
+            'transfer_notes.required' => 'الملاحظات  مطلوبة',
         ]);
+
+        // Additional validation: if recipient is provided, transfer_notes is required
+        if ($request->filled('recipient_id') && !$request->filled('transfer_notes')) {
+            return $this->sendError('ملاحظات النقل مطلوبة عند تحديد المستلم', [], 422);
+        }
 
         if ($validator->fails()) {
             return $this->sendError('بيانات غير صحيحة', $validator->errors(), 422);
@@ -343,16 +431,6 @@ class MedicalRecordController extends BaseController
         $patient = Patient::find($request->patient_id);
         if (!$patient) {
             return $this->sendError('لم يتم العثور على المريض', [], 404);
-        }
-
-        // Verify recipient exists and is not the same as sender
-        $recipient = User::find($request->recipient_id);
-        if (!$recipient) {
-            return $this->sendError('لم يتم العثور على المستلم', [], 422);
-        }
-
-        if ($recipient->user_id === $user->user_id) {
-            return $this->sendError('لا يمكن إرسال السجل لنفسك', [], 422);
         }
 
 
@@ -373,44 +451,68 @@ class MedicalRecordController extends BaseController
         }
 
 
-        // Create the medical record
-        $record = MedicalRecord::create([
-            'patient_id' => $request->patient_id,
-            'problem_type_code' => $request->problem_type_code,
-            'danger_level_code' => $request->danger_level_code,
-            'reviewed_party_user_id' => $request->reviewed_party_user_id,
-            'status_code' => $statusCode,
-            'created_by' => $user->user_id,
-            'last_modified_by' => $user->user_id,
-        ]);
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            // Create the medical record
+            $record = MedicalRecord::create([
+                'patient_id' => $request->patient_id,
+                'problem_type_code' => $request->problem_type_code,
+                'danger_level_code' => $request->danger_level_code,
+                'reviewed_party' => $request->reviewed_party,
+                'status_code' => $statusCode,
+                'transfer_status_code' => null, // No transfer status initially
+                'created_by' => $user->user_id,
+                'last_modified_by' => $user->user_id,
+            ]);
+            // in al lconditions create a transfer but if no recipient is  provided, send to all admins notifcation
+            // Verify recipient exists and is not the same as sender
+            // Create the transfer
+            $transfer = RecordTransfer::create([
+                'record_id' => $record->record_id,
+                'sender_id' => $user->user_id,
+                'recipient_id' => $request->recipient_id,
+                'transfer_notes' => $request->transfer_notes,
+            ]);
+
+            $recipient = User::find($request->recipient_id);
+            if ($recipient) {
+
+
+                // Broadcast transfer events
+                event(new TransferCreated($transfer, $user, $recipient));
+                event(new TransferReceived($transfer, $user, $recipient));
+            } else {
+                // send to all admins notification
+                $admins = User::where('role_code', 'admin')->get();
+                foreach ($admins as $admin) {
+                    event(new TransferCreated($transfer, $user, $admin));
+                }
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error creating medical record: ' . $e->getMessage());
+            return $this->sendError('حدث خطأ أثناء إنشاء السجل الطبي', [], 500);
+        }
 
         // Broadcast event for admin notifications
         event(new \App\Events\MedicalRecordCreated($record, $user));
 
-        // Check if record is already in transfer (since we removed status tracking, just check if any transfer exists)
-        $existingTransfer = RecordTransfer::where('record_id', $record->record_id)->first();
-        
-        if ($existingTransfer) {
-            return $this->sendError('السجل الطبي قيد النقل حالياً', [], 422);
+        $message = isset($transfer) ? 'تم إنشاء السجل الطبي مع النقل تلقائياً بنجاح' : 'تم إنشاء السجل الطبي بنجاح';
+
+        $responseData = [
+            'record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'transferStatus', 'creator'])
+        ];
+
+        // If a transfer was created, include it in the response
+        if (isset($transfer)) {
+            $responseData['transfer'] = $transfer->load(['recipient', 'sender']);
         }
 
-        // Create the transfer automatically
-        $transfer = RecordTransfer::create([
-            'record_id' => $record->record_id,
-            'sender_id' => $user->user_id,
-            'recipient_id' => $request->recipient_id,
-            'transfer_notes' => $request->transfer_notes,
-        ]);
-
-        // Load relationships for notification
-        $transfer->load(['medicalRecord.patient', 'medicalRecord.problemType', 'medicalRecord.status', 'sender']);
-
-        // Real-time broadcasting removed
-
-        return $this->sendResponse([
-            'record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'reviewedPartyUser', 'finalStatus', 'creator', 'transfers.recipient']),
-            'transfer' => $transfer->load(['medicalRecord.patient', 'sender', 'recipient'])
-        ], 'تم إنشاء السجل الطبي ونقله بنجاح', 201);
+        return $this->sendResponse($responseData, $message, 201);
     }
 
     /**
@@ -426,30 +528,40 @@ class MedicalRecordController extends BaseController
         $this->authorize('update', $record);
 
         $validator = Validator::make($request->all(), [
-            'problem_type_code' => 'sometimes|string|exists:static_data,code',
-            'danger_level_code' => 'sometimes|string|exists:static_data,code',
-            'reviewed_party_user_id' => 'sometimes|integer|exists:users,user_id',
-            'final_status_code' => 'sometimes|string|exists:static_data,code',
             'status_code' => 'sometimes|string|exists:static_data,code',
+        ], [
+            'status_code.string' => 'رمز الحالة يجب أن يكون نصاً',
+            'status_code.exists' => 'رمز الحالة غير موجود',
         ]);
 
         if ($validator->fails()) {
             return $this->sendError('بيانات غير صحيحة', $validator->errors(), 422);
         }
 
-        // Update fields
-        if ($request->has('problem_type_code')) $record->problem_type_code = $request->problem_type_code;
-        if ($request->has('danger_level_code')) $record->danger_level_code = $request->danger_level_code;
-        if ($request->has('reviewed_party_user_id')) $record->reviewed_party_user_id = $request->reviewed_party_user_id;
-        if ($request->has('final_status_code')) $record->final_status_code = $request->final_status_code;
-        if ($request->has('status_code')) $record->status_code = $request->status_code;
-        
-        $record->last_modified_by = auth()->user()->user_id;
-        $record->save();
+        // Get current user before transaction
+        $currentUser = auth()->user();
+
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            // Update only status field
+            if ($request->has('status_code')) {
+                $record->status_code = $request->status_code;
+            }
+
+            $record->last_modified_by = $currentUser->user_id;
+            $record->save();
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء تحديث السجل الطبي', [], 500);
+        }
 
         return $this->sendResponse(
-            ['record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'reviewedPartyUser', 'finalStatus', 'creator', 'transfers.recipient'])],
-            'تم تحديث السجل الطبي بنجاح'
+            ['record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'transferStatus', 'creator'])],
+            'تم تحديث حالة السجل الطبي بنجاح'
         );
     }
 
@@ -469,9 +581,127 @@ class MedicalRecordController extends BaseController
             return $this->sendError('لا يمكن حذف السجل الطبي لوجود عمليات نقل مرتبطة به', [], 422);
         }
 
-        $record->delete();
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            $record->delete();
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء حذف السجل الطبي', [], 500);
+        }
 
         return $this->sendResponse([], 'تم حذف السجل الطبي بنجاح');
+    }
+
+    /**
+     * Get daily transfers report grouped by patient
+     * Returns comprehensive report of all transfers for medical records within date range
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getDailyTransfersReport(Request $request)
+    {
+        $this->authorize('viewAny', MedicalRecord::class);
+
+        $user = auth()->user();
+        
+        // Get date range parameters, default to today
+        $fromDate = $request->get('from_date', today()->toDateString());
+        $toDate = $request->get('to_date', today()->toDateString());
+
+        // Build query for medical records with transfers in the date range
+        $query = MedicalRecord::with([
+            'patient.healthCenter',
+            'problemType',
+            'status',
+            'dangerLevel',
+            'transfers' => function($q) use ($fromDate, $toDate) {
+                $q->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59'])
+                  ->with(['sender', 'recipient'])
+                  ->orderBy('created_at', 'desc');
+            }
+        ])
+        ->whereHas('transfers', function($q) use ($fromDate, $toDate) {
+            $q->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59']);
+        });
+
+        // Apply user authorization
+        if (!$user->isAdmin()) {
+            $query->where(function($q) use ($user) {
+                $q->where('created_by', $user->user_id)
+                  ->orWhere('last_modified_by', $user->user_id)
+                  ->orWhereHas('transfers', function($transferQ) use ($user) {
+                      $transferQ->where('sender_id', $user->user_id)
+                                ->orWhere('recipient_id', $user->user_id);
+                  });
+            });
+        }
+
+        $records = $query->get();
+
+        // Group by patient and build report
+        $report = [];
+        $patients = [];
+
+        foreach ($records as $record) {
+            $patientId = $record->patient->patient_id;
+            
+            if (!isset($patients[$patientId])) {
+                $patients[$patientId] = [
+                    'patient_id' => $patientId,
+                    'patient_name' => $record->patient->full_name,
+                    'national_id' => $record->patient->national_id,
+                    'health_center' => $record->patient->healthCenter->label_en ?? 'N/A',
+                    'records' => []
+                ];
+            }
+
+            // Get all transfers for this record on the specified date
+            $recordTransfers = [];
+            foreach ($record->transfers as $transfer) {
+                $recordTransfers[] = [
+                    'transfer_id' => $transfer->transfer_id,
+                    'transfer_notes' => $transfer->transfer_notes,
+                    'sender_name' => $transfer->sender->full_name ?? 'N/A',
+                    'recipient_name' => $transfer->recipient->full_name ?? 'N/A',
+                    'transfer_date' => $transfer->created_at->format('Y-m-d H:i:s'),
+                    'status' => $record->status->label_en ?? 'N/A'
+                ];
+            }
+
+            // Add record to patient's records
+            $patients[$patientId]['records'][] = [
+                'record_id' => $record->record_id,
+                'problem_type' => $record->problemType->label_en ?? 'N/A',
+                'danger_level' => $record->dangerLevel->label_en ?? 'N/A',
+                'reviewed_party' => $record->reviewed_party ?? 'N/A',
+                'status' => $record->status->label_en ?? 'N/A',
+                'transfers' => $recordTransfers,
+                'total_transfers' => count($recordTransfers)
+            ];
+        }
+
+        // Convert to array and add summary statistics
+        $report = [
+            'date_range' => [
+                'from_date' => $fromDate,
+                'to_date' => $toDate
+            ],
+            'summary' => [
+                'total_patients' => count($patients),
+                'total_records' => $records->count(),
+                'total_transfers' => $records->sum(function($record) {
+                    return $record->transfers->count();
+                })
+            ],
+            'patients' => array_values($patients)
+        ];
+
+        return $this->sendResponse($report, 'تم جلب تقرير النقل اليومي بنجاح');
     }
 
     /**
@@ -486,9 +716,9 @@ class MedicalRecordController extends BaseController
         $user = auth()->user();
 
         // Get filter options based on user's accessible records
-        $query = MedicalRecord::where(function($q) use ($user) {
+        $query = MedicalRecord::where(function ($q) use ($user) {
             $q->where('created_by', $user->user_id)
-              ->orWhere('last_modified_by', $user->user_id);
+                ->orWhere('last_modified_by', $user->user_id);
         });
 
         $options = [
@@ -496,26 +726,26 @@ class MedicalRecordController extends BaseController
                 ->whereIn('code', $query->distinct()->pluck('status_code'))
                 ->select('code', 'label_en', 'label_ar')
                 ->get(),
-            
+
             'problem_types' => StaticData::where('type', 'problem_type')
                 ->whereIn('code', $query->distinct()->pluck('problem_type_code'))
                 ->select('code', 'label_en', 'label_ar')
                 ->get(),
-            
+
             'danger_levels' => StaticData::where('type', 'danger_level')
                 ->whereIn('code', $query->distinct()->pluck('danger_level_code'))
                 ->select('code', 'label_en', 'label_ar')
                 ->get(),
-            
-            'final_statuses' => StaticData::where('type', 'final_status')
-                ->whereIn('code', $query->distinct()->pluck('final_status_code'))
+
+            'transfer_statuses' => StaticData::where('type', 'transfer_status')
+                ->whereIn('code', $query->distinct()->pluck('transfer_status_code'))
                 ->select('code', 'label_en', 'label_ar')
                 ->get(),
-            
+
             'patients' => Patient::whereIn('patient_id', $query->distinct()->pluck('patient_id'))
                 ->select('patient_id', 'full_name', 'national_id')
                 ->get(),
-            
+
             'users' => User::whereIn('user_id', $query->distinct()->pluck('created_by', 'last_modified_by')->flatten())
                 ->select('user_id', 'full_name', 'username')
                 ->get(),
@@ -535,9 +765,9 @@ class MedicalRecordController extends BaseController
         $this->authorize('viewAny', MedicalRecord::class);
 
         $user = auth()->user();
-        $query = MedicalRecord::where(function($q) use ($user) {
+        $query = MedicalRecord::where(function ($q) use ($user) {
             $q->where('created_by', $user->user_id)
-              ->orWhere('last_modified_by', $user->user_id);
+                ->orWhere('last_modified_by', $user->user_id);
         });
 
         // Apply filters if provided
@@ -563,15 +793,15 @@ class MedicalRecordController extends BaseController
             'records_by_problem_type' => $query->selectRaw('problem_type_code, COUNT(*) as count')
                 ->groupBy('problem_type_code')
                 ->get(),
-            
+
             'records_by_danger_level' => $query->selectRaw('danger_level_code, COUNT(*) as count')
                 ->groupBy('danger_level_code')
                 ->get(),
-            
-            'records_by_final_status' => $query->selectRaw('final_status_code, COUNT(*) as count')
-                ->groupBy('final_status_code')
+
+            'records_by_transfer_status' => $query->selectRaw('transfer_status_code, COUNT(*) as count')
+                ->groupBy('transfer_status_code')
                 ->get(),
-            
+
             'records_with_transfers' => $query->hasTransfers()->count(),
             'records_without_transfers' => $query->noTransfers()->count(),
             'records_created_today' => $query->createdOn(now()->toDateString())->count(),
@@ -600,22 +830,22 @@ class MedicalRecordController extends BaseController
 
         $user = auth()->user();
         $query = MedicalRecord::with([
-            'patient.healthCenter', 
-            'status', 
-            'problemType', 
+            'patient.healthCenter',
+            'status',
+            'problemType',
             'dangerLevel',
-            'reviewedPartyUser',
-            'finalStatus',
-            'creator', 
+
+            'transferStatus',
+            'creator',
             'lastModifier',
             'transfers.recipient',
             'transfers.sender'
         ]);
 
         // Apply the same filters as index method
-        $query->where(function($q) use ($user) {
+        $query->where(function ($q) use ($user) {
             $q->where('created_by', $user->user_id)
-              ->orWhere('last_modified_by', $user->user_id);
+                ->orWhere('last_modified_by', $user->user_id);
         });
 
         // Apply all filters (same logic as index method)
@@ -625,7 +855,7 @@ class MedicalRecordController extends BaseController
         $records = $query->get();
 
         // Transform data for export
-        $exportData = $records->map(function($record) {
+        $exportData = $records->map(function ($record) {
             return [
                 'Record ID' => $record->record_id,
                 'Patient Name' => $record->patient->full_name ?? 'N/A',
@@ -634,8 +864,8 @@ class MedicalRecordController extends BaseController
                 'Status' => $record->status->label_en ?? 'N/A',
                 'Problem Type' => $record->problemType->label_en ?? 'N/A',
                 'Danger Level' => $record->dangerLevel->label_en ?? 'N/A',
-                'Reviewed By' => $record->reviewedPartyUser->full_name ?? 'N/A',
-                'Final Status' => $record->finalStatus->label_en ?? 'N/A',
+                'Reviewed By' => $record->reviewed_party ?? 'N/A',
+                'Transfer Status' => $record->transferStatus->label_en ?? 'N/A',
                 'Created By' => $record->creator->full_name ?? 'N/A',
                 'Created At' => $record->created_at->format('Y-m-d H:i:s'),
                 'Last Modified By' => $record->lastModifier->full_name ?? 'N/A',
@@ -649,8 +879,16 @@ class MedicalRecordController extends BaseController
             'total_records' => $exportData->count(),
             'data' => $exportData,
             'filters_applied' => $request->only([
-                'patient_name', 'patient_national_id', 'status_code',
-                'problem_type_code', 'danger_level_code', 'reviewed_party_user_id', 'final_status_code', 'created_from', 'created_to', 'search'
+                'patient_name',
+                'patient_national_id',
+                'status_code',
+                'problem_type_code',
+                'danger_level_code',
+                'reviewed_party_user_id',
+                'transfer_status_code',
+                'created_from',
+                'created_to',
+                'search'
             ])
         ], 'تم تصدير البيانات بنجاح');
     }
@@ -669,12 +907,12 @@ class MedicalRecordController extends BaseController
             $query->forPatient($request->patient_id);
         }
         if ($request->filled('patient_name')) {
-            $query->whereHas('patient', function($q) use ($request) {
+            $query->whereHas('patient', function ($q) use ($request) {
                 $q->where('full_name', 'like', '%' . $request->patient_name . '%');
             });
         }
         if ($request->filled('patient_national_id')) {
-            $query->whereHas('patient', function($q) use ($request) {
+            $query->whereHas('patient', function ($q) use ($request) {
                 $q->where('national_id', 'like', '%' . $request->patient_national_id . '%');
             });
         }
@@ -696,6 +934,9 @@ class MedicalRecordController extends BaseController
         if ($request->filled('reviewed_party_user_id')) {
             $query->reviewedBy($request->reviewed_party_user_id);
         }
+        if ($request->filled('transfer_status_code')) {
+            $query->withTransferStatus($request->transfer_status_code);
+        }
 
         // Date filters
         if ($request->filled('created_from')) {
@@ -708,14 +949,14 @@ class MedicalRecordController extends BaseController
         // Search filter
         if ($request->filled('search')) {
             $searchTerm = $request->search;
-            $query->where(function($q) use ($searchTerm) {
-                $q->whereHas('patient', function($patientQuery) use ($searchTerm) {
+            $query->where(function ($q) use ($searchTerm) {
+                $q->whereHas('patient', function ($patientQuery) use ($searchTerm) {
                     $patientQuery->where('full_name', 'like', '%' . $searchTerm . '%')
-                                ->orWhere('national_id', 'like', '%' . $searchTerm . '%');
+                        ->orWhere('national_id', 'like', '%' . $searchTerm . '%');
                 })
-                ->orWhereHas('transfers', function($transferQuery) use ($searchTerm) {
-                    $transferQuery->where('transfer_notes', 'like', '%' . $searchTerm . '%');
-                });
+                    ->orWhereHas('transfers', function ($transferQuery) use ($searchTerm) {
+                        $transferQuery->where('transfer_notes', 'like', '%' . $searchTerm . '%');
+                    });
             });
         }
     }

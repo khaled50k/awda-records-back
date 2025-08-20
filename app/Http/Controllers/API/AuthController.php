@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use App\Models\User;
 use App\Models\StaticData;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends BaseController
 {
@@ -30,6 +31,25 @@ class AuthController extends BaseController
             'password' => 'required|string|min:8',
             'full_name' => 'required|string|max:100',
             'role_code' => 'required|string|exists:static_data,code',
+        ], [
+            'username.required' => 'اسم المستخدم مطلوب',
+            'username.string' => 'اسم المستخدم يجب أن يكون نصاً',
+            'username.max' => 'اسم المستخدم يجب ألا يتجاوز 50 حرفاً',
+            'username.unique' => 'اسم المستخدم مستخدم بالفعل',
+            'email.required' => 'البريد الإلكتروني مطلوب',
+            'email.string' => 'البريد الإلكتروني يجب أن يكون نصاً',
+            'email.email' => 'البريد الإلكتروني يجب أن يكون صحيحاً',
+            'email.max' => 'البريد الإلكتروني يجب ألا يتجاوز 255 حرفاً',
+            'email.unique' => 'البريد الإلكتروني مستخدم بالفعل',
+            'password.required' => 'كلمة المرور مطلوبة',
+            'password.string' => 'كلمة المرور يجب أن تكون نصاً',
+            'password.min' => 'كلمة المرور يجب أن تكون 8 أحرف على الأقل',
+            'full_name.required' => 'الاسم الكامل مطلوب',
+            'full_name.string' => 'الاسم الكامل يجب أن يكون نصاً',
+            'full_name.max' => 'الاسم الكامل يجب ألا يتجاوز 100 حرف',
+            'role_code.required' => 'نوع المستخدم مطلوب',
+            'role_code.string' => 'نوع المستخدم يجب أن يكون نصاً',
+            'role_code.exists' => 'نوع المستخدم غير موجود',
         ]);
 
         if ($validator->fails()) {
@@ -42,14 +62,24 @@ class AuthController extends BaseController
             return $this->sendError('نوع المستخدم غير صحيح', [], 422);
         }
 
-        $user = User::create([
-            'username' => $request->username,
-            'email' => $request->email,
-            'password_hash' => Hash::make($request->password),
-            'full_name' => $request->full_name,
-            'role_code' => $request->role_code,
-            'is_active' => true,
-        ]);
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            $user = User::create([
+                'username' => $request->username,
+                'email' => $request->email,
+                'password_hash' => Hash::make($request->password),
+                'full_name' => $request->full_name,
+                'role_code' => $request->role_code,
+                'is_active' => true,
+            ]);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء إنشاء المستخدم', [], 500);
+        }
 
         return $this->sendResponse(
             ['user' => $user->load('role')],
@@ -69,6 +99,11 @@ class AuthController extends BaseController
         $validator = Validator::make($request->all(), [
             'username' => 'required|string',
             'password' => 'required|string',
+        ], [
+            'username.required' => 'اسم المستخدم مطلوب',
+            'username.string' => 'اسم المستخدم يجب أن يكون نصاً',
+            'password.required' => 'كلمة المرور مطلوبة',
+            'password.string' => 'كلمة المرور يجب أن تكون نصاً',
         ]);
 
         if ($validator->fails()) {
@@ -141,6 +176,15 @@ class AuthController extends BaseController
             'full_name' => 'sometimes|string|max:100',
             'email' => 'sometimes|string|email|max:255|unique:users,email,' . $user->user_id . ',user_id',
             'password' => 'filled|string|min:8',
+        ], [
+            'full_name.string' => 'الاسم الكامل يجب أن يكون نصاً',
+            'full_name.max' => 'الاسم الكامل يجب ألا يتجاوز 100 حرف',
+            'email.string' => 'البريد الإلكتروني يجب أن يكون نصاً',
+            'email.email' => 'البريد الإلكتروني يجب أن يكون صحيحاً',
+            'email.max' => 'البريد الإلكتروني يجب ألا يتجاوز 255 حرفاً',
+            'email.unique' => 'البريد الإلكتروني مستخدم بالفعل',
+            'password.string' => 'كلمة المرور يجب أن تكون نصاً',
+            'password.min' => 'كلمة المرور يجب أن تكون 8 أحرف على الأقل',
         ]);
 
         if ($validator->fails()) {
@@ -165,7 +209,17 @@ class AuthController extends BaseController
             return $this->sendError('لم يتم توفير بيانات للتحديث', [], 400);
         }
 
-        $user->update($updateData);
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            $user->update($updateData);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء تحديث بيانات المستخدم', [], 500);
+        }
         
         return $this->sendResponse([
             'user' => $user->fresh()->load('role')

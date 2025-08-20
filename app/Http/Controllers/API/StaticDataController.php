@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\StaticData;
+use Illuminate\Support\Facades\DB;
 
 class StaticDataController extends BaseController
 {
@@ -84,6 +85,10 @@ class StaticDataController extends BaseController
             $query->orderBy('type', 'asc')->orderBy('code', 'asc');
         }
 
+        // Filter to show only today's static data for fresh data
+        // This ensures users always see the most recent and relevant data
+        $query->whereDate('created_at', today());
+        
         // ===== PAGINATION =====
         $perPage = $request->get('per_page', 20);
         $perPage = min(max($perPage, 1), 100);
@@ -149,6 +154,24 @@ class StaticDataController extends BaseController
             'description' => 'nullable|string|max:1000',
             'is_active' => 'boolean',
             'metadata' => 'nullable|array',
+        ], [
+            'type.required' => 'النوع مطلوب',
+            'type.string' => 'النوع يجب أن يكون نصاً',
+            'type.max' => 'النوع يجب ألا يتجاوز 50 حرفاً',
+            'code.required' => 'الرمز مطلوب',
+            'code.string' => 'الرمز يجب أن يكون نصاً',
+            'code.max' => 'الرمز يجب ألا يتجاوز 50 حرفاً',
+            'code.unique' => 'الرمز مستخدم بالفعل',
+            'label_en.required' => 'التسمية الإنجليزية مطلوبة',
+            'label_en.string' => 'التسمية الإنجليزية يجب أن تكون نصاً',
+            'label_en.max' => 'التسمية الإنجليزية يجب ألا تتجاوز 255 حرفاً',
+            'label_ar.required' => 'التسمية العربية مطلوبة',
+            'label_ar.string' => 'التسمية العربية يجب أن تكون نصاً',
+            'label_ar.max' => 'التسمية العربية يجب ألا تتجاوز 255 حرفاً',
+            'description.string' => 'الوصف يجب أن يكون نصاً',
+            'description.max' => 'الوصف يجب ألا يتجاوز 1000 حرف',
+            'is_active.boolean' => 'حالة النشاط يجب أن تكون صحيحة أو خاطئة',
+            'metadata.array' => 'البيانات الوصفية يجب أن تكون مصفوفة',
         ]);
 
         if ($validator->fails()) {
@@ -164,15 +187,25 @@ class StaticDataController extends BaseController
             return $this->sendError('الكود موجود بالفعل لهذا النوع', [], 422);
         }
 
-        $staticData = StaticData::create([
-            'type' => $request->type,
-            'code' => $request->code,
-            'label_en' => $request->label_en,
-            'label_ar' => $request->label_ar,
-            'description' => $request->description,
-            'is_active' => $request->get('is_active', true),
-            'metadata' => $request->metadata ?? [],
-        ]);
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            $staticData = StaticData::create([
+                'type' => $request->type,
+                'code' => $request->code,
+                'label_en' => $request->label_en,
+                'label_ar' => $request->label_ar,
+                'description' => $request->description,
+                'is_active' => $request->get('is_active', true),
+                'metadata' => $request->metadata ?? [],
+            ]);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء إنشاء البيانات الثابتة', [], 500);
+        }
 
         return $this->sendResponse(
             ['static_data' => $staticData],
@@ -201,6 +234,24 @@ class StaticDataController extends BaseController
             'description' => 'nullable|string|max:1000',
             'is_active' => 'boolean',
             'metadata' => 'nullable|array',
+        ], [
+            'type.required' => 'النوع مطلوب',
+            'type.string' => 'النوع يجب أن يكون نصاً',
+            'type.max' => 'النوع يجب ألا يتجاوز 50 حرفاً',
+            'code.required' => 'الرمز مطلوب',
+            'code.string' => 'الرمز يجب أن يكون نصاً',
+            'code.max' => 'الرمز يجب ألا يتجاوز 50 حرفاً',
+            'code.unique' => 'الرمز مستخدم بالفعل',
+            'label_en.required' => 'التسمية الإنجليزية مطلوبة',
+            'label_en.string' => 'التسمية الإنجليزية يجب أن تكون نصاً',
+            'label_en.max' => 'التسمية الإنجليزية يجب ألا تتجاوز 255 حرفاً',
+            'label_ar.required' => 'التسمية العربية مطلوبة',
+            'label_ar.string' => 'التسمية العربية يجب أن تكون نصاً',
+            'label_ar.max' => 'التسمية العربية يجب ألا تتجاوز 255 حرفاً',
+            'description.string' => 'الوصف يجب أن يكون نصاً',
+            'description.max' => 'الوصف يجب ألا يتجاوز 1000 حرف',
+            'is_active.boolean' => 'حالة النشاط يجب أن تكون صحيحة أو خاطئة',
+            'metadata.array' => 'البيانات الوصفية يجب أن تكون مصفوفة',
         ]);
 
         if ($validator->fails()) {
@@ -219,30 +270,40 @@ class StaticDataController extends BaseController
             }
         }
 
-        // Update fields
-        if ($request->has('type')) {
-            $staticData->type = $request->type;
-        }
-        if ($request->has('code')) {
-            $staticData->code = $request->code;
-        }
-        if ($request->has('label_en')) {
-            $staticData->label_en = $request->label_en;
-        }
-        if ($request->has('label_ar')) {
-            $staticData->label_ar = $request->label_ar;
-        }
-        if ($request->has('description')) {
-            $staticData->description = $request->description;
-        }
-        if ($request->has('is_active')) {
-            $staticData->is_active = $request->is_active;
-        }
-        if ($request->has('metadata')) {
-            $staticData->metadata = $request->metadata;
-        }
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
 
-        $staticData->save();
+            // Update fields
+            if ($request->has('type')) {
+                $staticData->type = $request->type;
+            }
+            if ($request->has('code')) {
+                $staticData->code = $request->code;
+            }
+            if ($request->has('label_en')) {
+                $staticData->label_en = $request->label_en;
+            }
+            if ($request->has('label_ar')) {
+                $staticData->label_ar = $request->label_ar;
+            }
+            if ($request->has('description')) {
+                $staticData->description = $request->description;
+            }
+            if ($request->has('is_active')) {
+                $staticData->is_active = $request->is_active;
+            }
+            if ($request->has('metadata')) {
+                $staticData->metadata = $request->metadata;
+            }
+
+            $staticData->save();
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء تحديث البيانات الثابتة', [], 500);
+        }
 
         return $this->sendResponse(
             ['static_data' => $staticData],
@@ -283,7 +344,17 @@ class StaticDataController extends BaseController
             );
         }
 
-        $staticData->delete();
+        // Use transaction for critical operations
+        try {
+            DB::beginTransaction();
+
+            $staticData->delete();
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->sendError('حدث خطأ أثناء حذف البيانات الثابتة', [], 500);
+        }
 
         return $this->sendResponse([], 'تم حذف البيانات الثابتة بنجاح');
     }

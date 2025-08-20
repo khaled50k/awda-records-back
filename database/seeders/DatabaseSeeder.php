@@ -25,7 +25,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'admin@example.com',
             'password_hash' => Hash::make('awdaAdmin2025@**'),
             'role_code' => 'admin',
-            'full_name' => 'Admin User',
+            'full_name' => 'مدير النظام',
             'is_active' => true,
         ]);
 

@@ -60,9 +60,10 @@ Route::middleware('auth:sanctum')->group(function () {
 		Route::get('records/filter-options', 'getFilterOptions');
 		Route::get('records/statistics', 'getStatistics');
 		Route::get('records/export', 'export');
+		Route::get('records/daily-transfers-report', 'getDailyTransfersReport');
 		Route::get('records/{id}', 'show');
 		Route::post('records', 'store');
-		// Route::put('records/{id}', 'update');
+		Route::put('records/{id}', 'update');
 		// Route::delete('records/{id}', 'destroy');
 	});
 

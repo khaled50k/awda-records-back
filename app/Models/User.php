@@ -105,13 +105,7 @@ class User extends Authenticatable
         return $this->hasMany(MedicalRecord::class, 'last_modified_by', 'user_id');
     }
 
-    /**
-     * Get all medical records reviewed by this user.
-     */
-    public function reviewedMedicalRecords(): HasMany
-    {
-        return $this->hasMany(MedicalRecord::class, 'reviewed_party_user_id', 'user_id');
-    }
+   
 
     /**
      * Get all transfers sent by this user.

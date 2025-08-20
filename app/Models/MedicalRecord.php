@@ -36,8 +36,8 @@ class MedicalRecord extends Model
         'status_code',
         'problem_type_code',
         'danger_level_code',
-        'reviewed_party_user_id',
-        'final_status_code',
+        'reviewed_party',
+        'transfer_status_code',
         'created_by',
         'last_modified_by',
     ];
@@ -50,8 +50,8 @@ class MedicalRecord extends Model
     protected $casts = [
         'patient_id' => 'integer',
         'danger_level_code' => 'string',
-        'reviewed_party_user_id' => 'integer',
-        'final_status_code' => 'string',
+        'reviewed_party' => 'string',
+        'transfer_status_code' => 'string',
         'created_by' => 'integer',
         'last_modified_by' => 'integer',
         'created_at' => 'datetime',
@@ -106,21 +106,15 @@ class MedicalRecord extends Model
             ->where('type', 'danger_level');
     }
 
-    /**
-     * Get the user who reviewed this medical record.
-     */
-    public function reviewedPartyUser(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'reviewed_party_user_id', 'user_id');
-    }
+
 
     /**
-     * Get the final status information.
+     * Get the transfer status information.
      */
-    public function finalStatus(): BelongsTo
+    public function transferStatus(): BelongsTo
     {
-        return $this->belongsTo(StaticData::class, 'final_status_code', 'code')
-            ->where('type', 'final_status');
+        return $this->belongsTo(StaticData::class, 'transfer_status_code', 'code')
+            ->where('type', 'transfer_status');
     }
 
     /**
@@ -190,12 +184,14 @@ class MedicalRecord extends Model
         $query->where('danger_level_code', $dangerLevelCode);
     }
 
+
+
     /**
-     * Scope a query to only include medical records reviewed by a specific user.
+     * Scope a query to only include medical records with a specific transfer status.
      */
-    public function scopeReviewedBy(Builder $query, int $userId): void
+    public function scopeWithTransferStatus(Builder $query, string $transferStatusCode): void
     {
-        $query->where('reviewed_party_user_id', $userId);
+        $query->where('transfer_status_code', $transferStatusCode);
     }
 
     /**

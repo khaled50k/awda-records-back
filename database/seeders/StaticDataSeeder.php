@@ -36,11 +36,8 @@ class StaticDataSeeder extends Seeder
             // Status
             ['type' => 'status', 'code' => 'initiated', 'label_en' => 'Initiated', 'label_ar' => 'بدأ', 'description' => 'Record workflow initiated'],
             ['type' => 'status', 'code' => 'pending_review', 'label_en' => 'Pending Review', 'label_ar' => 'بانتظار المراجعة', 'description' => 'Record awaiting review'],
-            ['type' => 'status', 'code' => 'under_consultation', 'label_en' => 'Under Consultation', 'label_ar' => 'تحت الاستشارة', 'description' => 'Record currently under consultation'],
             ['type' => 'status', 'code' => 'completed', 'label_en' => 'Completed', 'label_ar' => 'مكتمل', 'description' => 'Record workflow completed'],
-            ['type' => 'status', 'code' => 'rejected', 'label_en' => 'Rejected', 'label_ar' => 'مرفوض', 'description' => 'Record workflow rejected'],
-            ['type' => 'status', 'code' => 'archived', 'label_en' => 'Archived', 'label_ar' => 'أرشفة', 'description' => 'Record workflow archived'],
-
+      
             // خدمات الجمهور و مختبر و صيدلية و أشعة و أقسام وعمليات و تمريض عيادات خارجية و مخازن و تقارير
             // Problem Types
             ['type' => 'problem_type', 'code' => 'public_services', 'label_en' => 'Public Services', 'label_ar' => 'خدمات الجمهور', 'description' => ''],
@@ -60,9 +57,9 @@ class StaticDataSeeder extends Seeder
             ['type' => 'danger_level', 'code' => 'critical', 'label_en' => 'Critical Risk', 'label_ar' => 'حرج', 'description' => ''],
             ['type' => 'danger_level', 'code' => 'emergency', 'label_en' => 'Emergency', 'label_ar' => 'طارئ', 'description' => ''],
 
-            // Final Status Types
-            ['type' => 'final_status', 'code' => 'approved', 'label_en' => 'Reviewed', 'label_ar' => 'مدقق عليه', 'description' => 'Medical record reviewed'],
-            ['type' => 'final_status', 'code' => 'rejected', 'label_en' => 'Not Reviewed', 'label_ar' => 'غير مدقق عليه', 'description' => 'Medical record not reviewed'],
+            // Transfer Status Types
+            ['type' => 'transfer_status', 'code' => 'not_reviewed', 'label_en' => 'Not Reviewed', 'label_ar' => 'غير مدقق', 'description' => 'Record not reviewed'],
+            ['type' => 'transfer_status', 'code' => 'reviewed', 'label_en' => 'Reviewed', 'label_ar' => 'تم التدقيق', 'description' => 'Record reviewed'],
              ];
 
         foreach ($staticData as $data) {
