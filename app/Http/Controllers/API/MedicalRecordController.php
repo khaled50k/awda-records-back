@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Builder; // Added for applyFilters
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 use Carbon\Carbon;
+use Rap2hpoutre\FastExcel\FastExcel;
 
 class MedicalRecordController extends BaseController
 {
@@ -703,21 +704,23 @@ class MedicalRecordController extends BaseController
             return $patientRow;
         });
 
-        // Construct the final API response.
-        $report = [
-            'date_range' => [
-                'from_date' => $fromDate,
-                'to_date'   => $toDate,
-            ],
-            'summary' => [
-                'total_patients'  => $formattedData->count(),
-                'total_records'   => $records->count(),
-                'total_transfers' => $records->sum(fn($record) => $record->transfers->count()),
-            ],
-            'patients' => $formattedData->values(),
-        ];
+        // Export to Excel using Fast Excel
+        $filename = "daily_transfers_report_{$fromDate}_to_{$toDate}.xlsx";
+        
+        // Prepare data for Excel export with proper headers
+        $exportData = $formattedData->map(function ($patient) {
+            return [
+                'رقم المريض' => $patient['patient_id'],
+                'اسم المريض' => $patient['patient_name'],
+                'الطبيب' => $patient['doctor_or_reviewed_party'],
+                // Add problem type columns dynamically
+                ...array_filter($patient, function ($value, $key) {
+                    return !in_array($key, ['patient_id', 'patient_name', 'doctor_or_reviewed_party']);
+                }, ARRAY_FILTER_USE_BOTH)
+            ];
+        });
 
-        return $this->sendResponse($report, 'تم جلب تقرير النقل اليومي بنجاح');
+        return (new FastExcel($exportData))->download($filename);
     }
 
     /**
