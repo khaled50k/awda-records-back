@@ -484,13 +484,13 @@ class MedicalRecordController extends BaseController
 
 
                 // Broadcast transfer events
-                event(new TransferCreated($transfer, $user, $recipient));
-                event(new TransferReceived($transfer, $user, $recipient));
+                event(new TransferCreated($transfer, $user));
+                event(new TransferReceived($transfer, $recipient));
             } else {
                 // send to all admins notification
                 $admins = User::where('role_code', 'admin')->get();
                 foreach ($admins as $admin) {
-                    event(new TransferCreated($transfer, $user, $admin));
+                    event(new TransferCreated($transfer, $user));
                 }
             }
 
