@@ -87,7 +87,6 @@ class StaticDataController extends BaseController
 
         // Filter to show only today's static data for fresh data
         // This ensures users always see the most recent and relevant data
-        $query->whereDate('created_at', today());
         
         // ===== PAGINATION =====
         $perPage = $request->get('per_page', 20);
