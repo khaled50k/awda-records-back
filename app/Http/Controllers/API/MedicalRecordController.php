@@ -14,6 +14,8 @@ use App\Events\TransferCreated;
 use App\Events\TransferReceived;
 use Illuminate\Database\Eloquent\Builder; // Added for applyFilters
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Collection;
+use Carbon\Carbon;
 
 class MedicalRecordController extends BaseController
 {
@@ -472,7 +474,7 @@ class MedicalRecordController extends BaseController
             $transfer = RecordTransfer::create([
                 'record_id' => $record->record_id,
                 'sender_id' => $user->user_id,
-                'recipient_id' => $request->recipient_id,
+                'recipient_id' => $request->recipient_id ?? null,
                 'transfer_notes' => $request->transfer_notes,
             ]);
 
@@ -609,32 +611,47 @@ class MedicalRecordController extends BaseController
 
         $user = auth()->user();
         
-        // Get date range parameters, default to today
-        $fromDate = $request->get('from_date', today()->toDateString());
-        $toDate = $request->get('to_date', today()->toDateString());
+        // FIX 1: Parse and reformat incoming dates to the standard 'Y-m-d' format.
+        // This ensures the database query works correctly, regardless of the input format.
+        try {
+            $fromDate = Carbon::parse($request->get('from_date', today()))->toDateString();
+            $toDate = Carbon::parse($request->get('to_date', today()))->toDateString();
+        } catch (\Exception $e) {
+            // Handle cases where the date format is invalid
+            return $this->sendError('Invalid date format. Please use a recognizable date format like Y-m-d or d-m-Y.', [], 422);
+        }
 
-        // Build query for medical records with transfers in the date range
+        // Dynamically fetch problem type columns in Arabic from the database
+        $problemTypeColumnsAr = StaticData::where('type', 'problem_type')
+            ->where('is_active', true)
+            ->pluck('label_ar', 'label_ar')
+            ->mapWithKeys(function ($label) {
+                return [$label => ''];
+            })
+            ->toArray();
+
+        // Build the database query with necessary relationships.
         $query = MedicalRecord::with([
-            'patient.healthCenter',
+            'patient',
             'problemType',
-            'status',
-            'dangerLevel',
-            'transfers' => function($q) use ($fromDate, $toDate) {
+            'transfers' => function ($q) use ($fromDate, $toDate) {
+                // FIX 2: Use the correctly formatted dates in the query.
                 $q->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59'])
-                  ->with(['sender', 'recipient'])
+                  ->with(['recipient'])
                   ->orderBy('created_at', 'desc');
             }
         ])
-        ->whereHas('transfers', function($q) use ($fromDate, $toDate) {
+        ->whereHas('transfers', function ($q) use ($fromDate, $toDate) {
+            // FIX 3: Also use the correctly formatted dates here.
             $q->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59']);
         });
 
-        // Apply user authorization
+        // Apply authorization scope for non-admin users.
         if (!$user->isAdmin()) {
-            $query->where(function($q) use ($user) {
+            $query->where(function ($q) use ($user) {
                 $q->where('created_by', $user->user_id)
                   ->orWhere('last_modified_by', $user->user_id)
-                  ->orWhereHas('transfers', function($transferQ) use ($user) {
+                  ->orWhereHas('transfers', function ($transferQ) use ($user) {
                       $transferQ->where('sender_id', $user->user_id)
                                 ->orWhere('recipient_id', $user->user_id);
                   });
@@ -643,62 +660,61 @@ class MedicalRecordController extends BaseController
 
         $records = $query->get();
 
-        // Group by patient and build report
-        $report = [];
-        $patients = [];
-
-        foreach ($records as $record) {
-            $patientId = $record->patient->patient_id;
-            
-            if (!isset($patients[$patientId])) {
-                $patients[$patientId] = [
-                    'patient_id' => $patientId,
-                    'patient_name' => $record->patient->full_name,
-                    'national_id' => $record->patient->national_id,
-                    'health_center' => $record->patient->healthCenter->label_en ?? 'N/A',
-                    'records' => []
-                ];
-            }
-
-            // Get all transfers for this record on the specified date
-            $recordTransfers = [];
-            foreach ($record->transfers as $transfer) {
-                $recordTransfers[] = [
-                    'transfer_id' => $transfer->transfer_id,
-                    'transfer_notes' => $transfer->transfer_notes,
-                    'sender_name' => $transfer->sender->full_name ?? 'N/A',
-                    'recipient_name' => $transfer->recipient->full_name ?? 'N/A',
-                    'transfer_date' => $transfer->created_at->format('Y-m-d H:i:s'),
-                    'status' => $record->status->label_en ?? 'N/A'
-                ];
-            }
-
-            // Add record to patient's records
-            $patients[$patientId]['records'][] = [
-                'record_id' => $record->record_id,
-                'problem_type' => $record->problemType->label_en ?? 'N/A',
-                'danger_level' => $record->dangerLevel->label_en ?? 'N/A',
-                'reviewed_party' => $record->reviewed_party ?? 'N/A',
-                'status' => $record->status->label_en ?? 'N/A',
-                'transfers' => $recordTransfers,
-                'total_transfers' => count($recordTransfers)
-            ];
+        // If the query returns no records, we can stop here and return the empty summary.
+        if ($records->isEmpty()) {
+            return $this->sendResponse([
+                'date_range' => ['from_date' => $fromDate, 'to_date' => $toDate],
+                'summary' => ['total_patients' => 0, 'total_records' => 0, 'total_transfers' => 0],
+                'patients' => [],
+            ], 'تم جلب تقرير النقل اليومي بنجاح');
         }
 
-        // Convert to array and add summary statistics
+        // Process the records into the final pivoted format.
+        $groupedByPatient = $records->groupBy('patient_id');
+
+        $formattedData = $groupedByPatient->map(function (Collection $patientRecords) use ($problemTypeColumnsAr) {
+            $firstRecord = $patientRecords->first();
+            
+            $patientRow = [
+                'patient_id'   => $firstRecord->patient_id,
+                'patient_name' => $firstRecord->patient->full_name,
+                'doctor_or_reviewed_party' => '',
+            ] + $problemTypeColumnsAr;
+
+            foreach ($patientRecords as $record) {
+                $reviewer = $record->reviewed_party && $record->reviewed_party !== 'N/A'
+                    ? $record->reviewed_party
+                    : ($record->transfers->first()->recipient->full_name ?? 'N/A');
+
+                $problemTypeAr = $record->problemType->label_ar ?? 'غير معروف';
+                $notes = $record->transfers->first()->transfer_notes ?? '';
+
+                if (array_key_exists($problemTypeAr, $patientRow)) {
+                    $patientRow[$problemTypeAr] = empty($patientRow[$problemTypeAr])
+                        ? $notes
+                        : $patientRow[$problemTypeAr] . "\n---\n" . $notes;
+                }
+
+                if (empty($patientRow['doctor_or_reviewed_party'])) {
+                    $patientRow['doctor_or_reviewed_party'] = $reviewer;
+                }
+            }
+            
+            return $patientRow;
+        });
+
+        // Construct the final API response.
         $report = [
             'date_range' => [
                 'from_date' => $fromDate,
-                'to_date' => $toDate
+                'to_date'   => $toDate,
             ],
             'summary' => [
-                'total_patients' => count($patients),
-                'total_records' => $records->count(),
-                'total_transfers' => $records->sum(function($record) {
-                    return $record->transfers->count();
-                })
+                'total_patients'  => $formattedData->count(),
+                'total_records'   => $records->count(),
+                'total_transfers' => $records->sum(fn($record) => $record->transfers->count()),
             ],
-            'patients' => array_values($patients)
+            'patients' => $formattedData->values(),
         ];
 
         return $this->sendResponse($report, 'تم جلب تقرير النقل اليومي بنجاح');
