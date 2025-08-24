@@ -527,14 +527,54 @@ class MedicalRecordController extends BaseController
      */
     public function update(Request $request, $id)
     {
-        $record = MedicalRecord::findOrFail($id);
+        $record = MedicalRecord::with([
+            'patient.healthCenter',
+            'status',
+            'problemType',
+            'dangerLevel',
+            'transferStatus',
+            'creator',
+            'lastModifier',
+            'transfers.recipient',
+            'transfers.sender'
+        ])->findOrFail($id);
+        
         $this->authorize('update', $record);
 
+        $user = auth()->user();
+        
+        // Load the last transfer for this record
+        $lastTransfer = $record->transfers()->latest('created_at')->first();
+        
+        // Validation rules for medical record
         $validator = Validator::make($request->all(), [
+            'patient_id' => 'sometimes|integer|exists:patients,patient_id',
+            'problem_type_code' => 'sometimes|string|exists:static_data,code',
+            'danger_level_code' => 'sometimes|string|exists:static_data,code',
+            'reviewed_party' => 'sometimes|string|max:50',
             'status_code' => 'sometimes|string|exists:static_data,code',
+            'transfer_status_code' => 'sometimes|nullable|string|exists:static_data,code',
+            
+            // Transfer data validation (if transfer exists)
+            'transfer_notes' => 'sometimes|string|max:1000',
+            'recipient_id' => 'sometimes|nullable|integer|exists:users,user_id',
         ], [
+            'patient_id.integer' => 'معرف المريض يجب أن يكون رقماً صحيحاً',
+            'patient_id.exists' => 'معرف المريض غير موجود',
+            'problem_type_code.string' => 'نوع المشكلة يجب أن يكون نصاً',
+            'problem_type_code.exists' => 'نوع المشكلة غير موجود',
+            'danger_level_code.string' => 'مستوى الخطر يجب أن يكون نصاً',
+            'danger_level_code.exists' => 'مستوى الخطر غير موجود',
+            'reviewed_party.string' => 'الطرف المراجع يجب أن يكون نصاً',
+            'reviewed_party.max' => 'الطرف المراجع يجب ألا يتجاوز 50 حرف',
             'status_code.string' => 'رمز الحالة يجب أن يكون نصاً',
             'status_code.exists' => 'رمز الحالة غير موجود',
+            'transfer_status_code.string' => 'رمز حالة النقل يجب أن يكون نصاً',
+            'transfer_status_code.exists' => 'رمز حالة النقل غير موجود',
+            'transfer_notes.string' => 'ملاحظات النقل يجب أن تكون نصاً',
+            'transfer_notes.max' => 'ملاحظات النقل يجب ألا تتجاوز 1000 حرف',
+            'recipient_id.integer' => 'معرف المستلم يجب أن يكون رقماً صحيحاً',
+            'recipient_id.exists' => 'معرف المستلم غير موجود',
         ]);
 
         if ($validator->fails()) {
@@ -548,24 +588,74 @@ class MedicalRecordController extends BaseController
         try {
             DB::beginTransaction();
 
-            // Update only status field
-            if ($request->has('status_code')) {
-                $record->status_code = $request->status_code;
+            // Update medical record fields
+            $recordFields = [
+                'patient_id',
+                'problem_type_code', 
+                'danger_level_code',
+                'reviewed_party',
+                'status_code',
+                'transfer_status_code'
+            ];
+
+            foreach ($recordFields as $field) {
+                if ($request->has($field)) {
+                    $record->$field = $request->$field;
+                }
             }
 
             $record->last_modified_by = $currentUser->user_id;
             $record->save();
 
+            // Update transfer data if transfer exists and user has permission
+            if ($lastTransfer && ($user->isAdmin() || $lastTransfer->sender_id === $user->user_id)) {
+                $transferUpdated = false;
+                
+                if ($request->has('transfer_notes')) {
+                    $lastTransfer->transfer_notes = $request->transfer_notes;
+                    $transferUpdated = true;
+                }
+                
+                if ($request->has('recipient_id')) {
+                    $lastTransfer->recipient_id = $request->recipient_id;
+                    $transferUpdated = true;
+                }
+                
+                if ($transferUpdated) {
+                    $lastTransfer->save();
+                }
+            }
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
+            Log::error('Error updating medical record: ' . $e->getMessage());
             return $this->sendError('حدث خطأ أثناء تحديث السجل الطبي', [], 500);
         }
 
-        return $this->sendResponse(
-            ['record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'transferStatus', 'creator'])],
-            'تم تحديث حالة السجل الطبي بنجاح'
-        );
+        // Reload the record with all relationships
+        $record->refresh();
+        $record->load([
+            'patient.healthCenter',
+            'status',
+            'problemType',
+            'dangerLevel',
+            'transferStatus',
+            'creator',
+            'lastModifier',
+            'transfers.recipient',
+            'transfers.sender'
+        ]);
+
+        // Get the updated last transfer
+        $updatedLastTransfer = $record->transfers()->latest('created_at')->first();
+
+        $responseData = [
+            'record' => $record,
+            'last_transfer' => $updatedLastTransfer
+        ];
+
+        return $this->sendResponse($responseData, 'تم تحديث السجل الطبي بنجاح');
     }
 
     /**

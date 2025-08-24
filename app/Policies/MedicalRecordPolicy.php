@@ -39,7 +39,17 @@ class MedicalRecordPolicy
      */
     public function update(User $user, MedicalRecord $medicalRecord): bool
     {
-        return $user->isAdmin() || $user->isEmployee();
+        // Admin can edit all records
+        if ($user->isAdmin()) {
+            return true;
+        }
+        
+        // Employee can only edit records they created
+        if ($user->isEmployee()) {
+            return $medicalRecord->created_by === $user->user_id;
+        }
+        
+        return false;
     }
 
     /**
