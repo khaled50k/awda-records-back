@@ -47,8 +47,10 @@ class RecordTransferController extends BaseController
         // This ensures users always see the most recent and relevant data
         $query->whereDate('created_at', today());
         $query->orderBy('created_at', 'desc');
-        $transfers = $query->paginate(15);
-        
+        // ===== PAGINATION =====
+        $perPage = $request->get('per_page', 100);
+        $perPage = min(max($perPage, 1), 100); // Limit between 1 and 100
+
     
         
         return $this->sendResponse($transfers, 'تم جلب قائمة عمليات النقل المرسلة إليك بنجاح');
