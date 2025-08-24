@@ -30,12 +30,11 @@ class RecordTransferController extends BaseController
             'medicalRecord.status',
             'medicalRecord.transferStatus'
         ]);
-// admin must see all transfers even if do not have a recipient 
+
         // Admin sees all transfers, others only see transfers where they are the recipient
         if (!$user->isAdmin()) {
             $query->where('recipient_id', $user->user_id);
             // ->orWhere('sender_id', $user->user_id);
-
         }
 
         // Filter by record
@@ -47,11 +46,13 @@ class RecordTransferController extends BaseController
         // This ensures users always see the most recent and relevant data
         $query->whereDate('created_at', today());
         $query->orderBy('created_at', 'desc');
+
         // ===== PAGINATION =====
         $perPage = $request->get('per_page', 100);
         $perPage = min(max($perPage, 1), 100); // Limit between 1 and 100
 
-    
+        // Execute the query with pagination
+        $transfers = $query->paginate($perPage);
         
         return $this->sendResponse($transfers, 'تم جلب قائمة عمليات النقل المرسلة إليك بنجاح');
     }
