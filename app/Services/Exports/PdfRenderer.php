@@ -48,7 +48,7 @@ class PdfRenderer
         // Enforce A4 portrait and Arabic-friendly defaults
         $config->set('page.size', 'A4');
         $config->set('page.orientation', 'portrait');
-        $config->set('pdf.default_font', 'tajawal'); // one of Gpdf built-in Arabic fonts
+        $config->set('pdf.default_font', 'tajawal');
         $config->set('pdf.isHtml5ParserEnabled', true);
         $config->set('pdf.isRemoteEnabled', true);
         $config->set('pdf.dpi', 120);
@@ -58,11 +58,13 @@ class PdfRenderer
         // Generate raw PDF binary
         $binary = $gpdf->generate($html);
 
-        return response($binary, 200, [
+        // Stream the binary to avoid content-length/buffering issues
+        return response()->streamDownload(function () use ($binary) {
+            echo $binary;
+        }, $filename, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            'Content-Length' => strlen($binary),
             'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
+            'Pragma' => 'public',
         ]);
     }
 }
