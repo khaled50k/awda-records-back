@@ -62,12 +62,12 @@ class PdfExportService implements ExportServiceInterface
             <title>تقرير النقل اليومي</title>
             <style>
                 @page { margin: 20px; }
-                body { font-family: "DejaVu Sans", "Amiri", "Arial", sans-serif; direction: rtl; unicode-bidi: embed; color: #111; }
+                body { font-family: "DejaVu Sans", "Amiri", "Arial", sans-serif; direction: rtl; unicode-bidi: bidi-override; color: #111; }
                 .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
                 .header h1 { color: #333; margin: 0; font-size: 20px; }
                 .header p { color: #666; margin: 4px 0; font-size: 12px; }
                 table { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: fixed; }
-                th, td { border: 1px solid #bbb; padding: 6px; text-align: right; font-size: 11px; word-wrap: break-word; }
+                th, td { border: 1px solid #bbb; padding: 6px; text-align: right; font-size: 11px; word-wrap: break-word; line-height: 1.6; }
                 th { background-color: #f2f2f2; font-weight: bold; }
                 tr:nth-child(even) { background-color: #fbfbfb; }
                 .summary { margin-top: 14px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; font-size: 12px; }
@@ -95,25 +95,37 @@ class PdfExportService implements ExportServiceInterface
             return '<p>لا توجد بيانات لعرضها</p>';
         }
 
-        $headers = array_keys($data->first());
-        
+        // Build headers: exclude patient_id; localize known keys
+        $firstRow = $data->first();
+        $keys = array_keys($firstRow);
+        $keys = array_values(array_filter($keys, function ($k) {
+            return $k !== 'patient_id';
+        }));
+
+        $headerMap = [
+            'patient_name' => 'اسم المريض',
+            'doctor_or_reviewed_party' => 'الطبيب',
+        ];
+
         $html = '<table>';
         
-        // Table headers
+        // Table headers (Arabic)
         $html .= '<tr>';
-        foreach ($headers as $header) {
-            $html .= '<th>' . htmlspecialchars($header) . '</th>';
+        foreach ($keys as $key) {
+            $label = $headerMap[$key] ?? $key; // problem type labels are already Arabic
+            $html .= '<th>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</th>';
         }
         $html .= '</tr>';
         
         // Table data
         foreach ($data as $row) {
             $html .= '<tr>';
-            foreach ($headers as $header) {
-                $value = $row[$header] ?? '';
-                // Convert newlines to <br> to preserve multi-line Arabic text
-                $value = nl2br((string) $value);
-                $html .= '<td>' . $value . '</td>';
+            foreach ($keys as $key) {
+                $value = $row[$key] ?? '';
+                // Escape then convert newlines to <br>
+                $safe = htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+                $safe = nl2br($safe);
+                $html .= '<td>' . $safe . '</td>';
             }
             $html .= '</tr>';
         }
