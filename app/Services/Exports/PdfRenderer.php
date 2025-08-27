@@ -3,6 +3,7 @@
 namespace App\Services\Exports;
 
 use Illuminate\Contracts\View\Factory as ViewFactory;
+use Illuminate\Support\Facades\Storage;
 use Omaralalwi\Gpdf\Gpdf;
 use Omaralalwi\Gpdf\GpdfConfig;
 
@@ -36,11 +37,7 @@ class PdfRenderer
         $configArray = config('gpdf');
         if (empty($configArray)) {
             $vendorConfig = base_path('vendor/omaralalwi/gpdf/config/gpdf.php');
-            if (file_exists($vendorConfig)) {
-                $configArray = require $vendorConfig;
-            } else {
-                $configArray = [];
-            }
+            $configArray = file_exists($vendorConfig) ? require $vendorConfig : [];
         }
 
         $config = new GpdfConfig($configArray);
@@ -48,7 +45,7 @@ class PdfRenderer
         // Enforce A4 portrait and Arabic-friendly defaults
         $config->set('page.size', 'A4');
         $config->set('page.orientation', 'portrait');
-        $config->set('pdf.default_font', 'tajawal'); // one of Gpdf built-in Arabic fonts
+        $config->set('pdf.default_font', 'tajawal');
         $config->set('pdf.isHtml5ParserEnabled', true);
         $config->set('pdf.isRemoteEnabled', true);
         $config->set('pdf.dpi', 120);
@@ -58,11 +55,20 @@ class PdfRenderer
         // Generate raw PDF binary
         $binary = $gpdf->generate($html);
 
-        return response($binary, 200, [
+        // Write to temp file and return a clean download (most reliable for browsers/PDF viewers)
+        $tempDir = 'temp';
+        Storage::makeDirectory($tempDir);
+        $tempPath = storage_path('app/' . $tempDir . '/' . $filename);
+        file_put_contents($tempPath, $binary);
+
+        // Ensure no previous output corrupts the PDF
+        if (function_exists('ob_get_level')) {
+            while (ob_get_level() > 0) { ob_end_clean(); }
+        }
+
+        return response()->download($tempPath, $filename, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            'Content-Length' => strlen($binary),
             'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
-        ]);
+        ])->deleteFileAfterSend(true);
     }
 }
