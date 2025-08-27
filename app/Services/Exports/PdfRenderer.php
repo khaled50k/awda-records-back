@@ -2,9 +2,9 @@
 
 namespace App\Services\Exports;
 
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Contracts\View\Factory as ViewFactory;
-use Illuminate\Http\Response as HttpResponse;
+use Omaralalwi\Gpdf\Gpdf;
+use Omaralalwi\Gpdf\GpdfConfig;
 
 class PdfRenderer
 {
@@ -15,21 +15,15 @@ class PdfRenderer
     /**
      * Render a standardized Arabic/RTL A4 PDF table and return a downloadable response.
      *
-     * @param string $filename      e.g. daily_transfers_2025-08-20.pdf
-     * @param string $title         Report title in Arabic
-     * @param array<int,string> $headers Arabic column headers (order shown)
-     * @param array<int,array<int,string>|array<string,string>> $rows Rows as arrays (match headers order) or assoc arrays
-     * @param array<string,mixed> $meta Optional metadata (date range, summary, etc.)
+     * @param string $filename
+     * @param string $title
+     * @param array<int,string> $headers
+     * @param array<int,array<int,string>|array<string,string>> $rows
+     * @param array<string,mixed> $meta
      * @return \Symfony\Component\HttpFoundation\Response
      */
-    public function downloadTable(string $filename, string $title, array $headers, array $rows, array $meta = []): HttpResponse
+    public function downloadTable(string $filename, string $title, array $headers, array $rows, array $meta = [])
     {
-        Pdf::setOptions([
-            'isHtml5ParserEnabled' => true,
-            'isRemoteEnabled' => true,
-            'defaultFont' => 'DejaVu Sans',
-        ]);
-
         $html = $this->view->make('reports.base_table', [
             'title' => $title,
             'headers' => $headers,
@@ -38,8 +32,37 @@ class PdfRenderer
             'generatedAt' => now()->format('Y-m-d H:i:s'),
         ])->render();
 
-        $pdf = Pdf::loadHTML($html)->setPaper('A4', 'landscape');
+        // Load Gpdf config (published or package default)
+        $configArray = config('gpdf');
+        if (empty($configArray)) {
+            $vendorConfig = base_path('vendor/omaralalwi/gpdf/config/gpdf.php');
+            if (file_exists($vendorConfig)) {
+                $configArray = require $vendorConfig;
+            } else {
+                $configArray = [];
+            }
+        }
 
-        return $pdf->download($filename);
+        $config = new GpdfConfig($configArray);
+
+        // Enforce A4 portrait and Arabic-friendly defaults
+        $config->set('page.size', 'A4');
+        $config->set('page.orientation', 'portrait');
+        $config->set('pdf.default_font', 'tajawal'); // one of Gpdf built-in Arabic fonts
+        $config->set('pdf.isHtml5ParserEnabled', true);
+        $config->set('pdf.isRemoteEnabled', true);
+        $config->set('pdf.dpi', 120);
+
+        $gpdf = new Gpdf($config);
+
+        // Generate raw PDF binary
+        $binary = $gpdf->generate($html);
+
+        return response($binary, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Length' => strlen($binary),
+            'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
+        ]);
     }
 }

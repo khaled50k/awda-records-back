@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>{{ $title }}</title>
     <style>
-        @page { margin: 20px; }
+        @page { size: A4 portrait; margin: 20mm; }
         body { font-family: "DejaVu Sans", "Amiri", "Arial", sans-serif; direction: rtl; unicode-bidi: bidi-override; color: #111; }
         .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
         .header h1 { color: #333; margin: 0; font-size: 20px; }
