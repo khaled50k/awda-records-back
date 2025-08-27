@@ -26,10 +26,12 @@ class GenerateReportRequest extends FormRequest
             'report_type' => ['required', 'string', Rule::in(['daily_transfers'])],
             'format' => ['sometimes', 'string', Rule::in(['csv', 'excel', 'pdf'])],
             'filters' => ['sometimes', 'array'],
-            'filters.from_date' => ['sometimes', 'date', 'before_or_equal:filters.to_date'],
-            'filters.to_date' => ['sometimes', 'date', 'after_or_equal:filters.from_date'],
-            'filters.health_center_code' => ['sometimes', 'string', 'max:50'],
-            'filters.problem_type_code' => ['sometimes', 'string', 'max:50'],
+            // Dates are optional; when present must be valid. Defaults handled in service.
+            'filters.from_date' => ['nullable', 'date', 'before_or_equal:filters.to_date'],
+            'filters.to_date' => ['nullable', 'date', 'after_or_equal:filters.from_date'],
+            // Codes are optional; when present must be strings
+            'filters.health_center_code' => ['nullable', 'string', 'max:50'],
+            'filters.problem_type_code' => ['nullable', 'string', 'max:50'],
         ];
     }
 

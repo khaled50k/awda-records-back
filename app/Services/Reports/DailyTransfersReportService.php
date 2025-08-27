@@ -21,15 +21,24 @@ class DailyTransfersReportService implements ReportServiceInterface
     {
         $user = Auth::user();
         
-        // Parse and validate dates
-        $fromDate = $this->parseDate($filters['from_date'] ?? today());
-        $toDate = $this->parseDate($filters['to_date'] ?? today());
+        // Sanitize filters: default dates to today if null/empty; ignore empty codes
+        $fromInput = $filters['from_date'] ?? null;
+        $toInput = $filters['to_date'] ?? null;
+        
+        $fromDate = $this->parseDateOrToday($fromInput);
+        $toDate = $this->parseDateOrToday($toInput ?? $fromInput);
+        
+        $healthCenterCode = $this->nullIfEmpty($filters['health_center_code'] ?? null);
+        $problemTypeCode = $this->nullIfEmpty($filters['problem_type_code'] ?? null);
         
         // Get problem type columns in Arabic
         $problemTypeColumnsAr = $this->getProblemTypeColumns();
         
         // Build the query
-        $query = $this->buildQuery($fromDate, $toDate, $filters);
+        $query = $this->buildQuery($fromDate, $toDate, [
+            'health_center_code' => $healthCenterCode,
+            'problem_type_code' => $problemTypeCode,
+        ]);
         
         // Apply authorization scope for non-admin users
         if (!$user->isAdmin()) {
@@ -40,7 +49,7 @@ class DailyTransfersReportService implements ReportServiceInterface
         
         if ($records->isEmpty()) {
             return [
-                'data' => [],
+                'data' => collect(),
                 'summary' => [
                     'total_patients' => 0,
                     'total_records' => 0,
@@ -90,19 +99,22 @@ class DailyTransfersReportService implements ReportServiceInterface
         ];
     }
 
-    /**
-     * Parse and format date.
-     *
-     * @param string|Carbon $date
-     * @return string
-     */
-    private function parseDate($date): string
+    private function parseDateOrToday($date): string
     {
+        if (empty($date)) {
+            return today()->toDateString();
+        }
         if ($date instanceof Carbon) {
             return $date->toDateString();
         }
-        
         return Carbon::parse($date)->toDateString();
+    }
+
+    private function nullIfEmpty($value)
+    {
+        if ($value === null) return null;
+        if (is_string($value) && trim($value) === '') return null;
+        return $value;
     }
 
     /**
@@ -144,14 +156,14 @@ class DailyTransfersReportService implements ReportServiceInterface
             $q->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59']);
         });
 
-        // Apply additional filters
-        if (isset($filters['health_center_code'])) {
+        // Apply additional filters only when provided (null means include all)
+        if (!empty($filters['health_center_code'])) {
             $query->whereHas('patient', function ($q) use ($filters) {
                 $q->where('health_center_code', $filters['health_center_code']);
             });
         }
 
-        if (isset($filters['problem_type_code'])) {
+        if (!empty($filters['problem_type_code'])) {
             $query->where('problem_type_code', $filters['problem_type_code']);
         }
 
