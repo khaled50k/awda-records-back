@@ -16,9 +16,9 @@ class ExportServiceFactory
     public static function create(string $format): ExportServiceInterface
     {
         return match ($format) {
-            'csv' => new CsvExportService(),
-            'excel' => new ExcelExportService(),
-            'pdf' => new PdfExportService(),
+            'csv' => app()->make(CsvExportService::class),
+            'excel' => app()->make(ExcelExportService::class),
+            'pdf' => app()->make(PdfExportService::class),
             default => throw new InvalidArgumentException("Export format '{$format}' is not supported.")
         };
     }
