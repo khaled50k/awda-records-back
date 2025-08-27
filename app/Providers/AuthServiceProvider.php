@@ -5,11 +5,13 @@ namespace App\Providers;
 use App\Models\MedicalRecord;
 use App\Models\Patient;
 use App\Models\RecordTransfer;
+use App\Models\Reports;
 use App\Models\StaticData;
 use App\Models\User;
 use App\Policies\MedicalRecordPolicy;
 use App\Policies\PatientPolicy;
 use App\Policies\RecordTransferPolicy;
+use App\Policies\ReportsPolicy;
 use App\Policies\StaticDataPolicy;
 use App\Policies\UserPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
@@ -27,6 +29,7 @@ class AuthServiceProvider extends ServiceProvider
         Patient::class => PatientPolicy::class,
         MedicalRecord::class => MedicalRecordPolicy::class,
         RecordTransfer::class => RecordTransferPolicy::class,
+        Reports::class => ReportsPolicy::class,
         StaticData::class => StaticDataPolicy::class,
     ];
 

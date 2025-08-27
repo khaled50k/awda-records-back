@@ -11,6 +11,7 @@ use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\PatientController;
 use App\Http\Controllers\API\MedicalRecordController;
 use App\Http\Controllers\API\RecordTransferController;
+use App\Http\Controllers\API\ReportsController;
 
 // Public routes
 Route::controller(AuthController::class)->group(function(){
@@ -76,6 +77,12 @@ Route::middleware('auth:sanctum')->group(function () {
 		// Route::delete('transfers/{id}', 'destroy');
 		Route::post('transfers/{id}/receive', 'receive');
 		Route::post('transfers/{id}/complete', 'complete');
+	});
+
+	// Reports management
+	Route::controller(ReportsController::class)->group(function(){
+		Route::get('reports/available', 'getAvailableReports');
+		Route::post('reports/generate', 'generateReport');
 	});
 
 	// Static data management (Admin only)
