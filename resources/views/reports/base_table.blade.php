@@ -4,26 +4,97 @@
     <meta charset="UTF-8">
     <title>{{ $title }}</title>
     <style>
-        @page { size: A4 portrait; margin: 20mm; }
-        body { font-family: "Cairo", "DejaVu Sans", "Amiri", sans-serif; direction: rtl; unicode-bidi: bidi-override; color: #111; line-height: 1.85; }
-        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        @page { size: A4 portrait; margin: 18mm; }
+
+        body { 
+            font-family: "Cairo", "DejaVu Sans", "Amiri", sans-serif; 
+            direction: rtl; 
+            unicode-bidi: bidi-override; 
+            color: #111; 
+            line-height: 1.9; 
+            font-size: 13px;
+            background-color: #fff;
+        }
+
+        table { 
+            width: 100%; 
+            border-collapse: separate; 
+            border-spacing: 0; 
+            table-layout: fixed;
+            margin-top: 8px;
+        }
+
         thead { display: table-header-group; }
         tfoot { display: table-row-group; }
         tr { page-break-inside: avoid; }
-        thead th { background-color: #f3f4f6; color: #111; }
-        th, td { border: 1px solid #aeb4bb; padding: 8px 10px; text-align: right; font-size: 12px; word-wrap: break-word; white-space: pre-wrap; word-break: break-word; hyphens: auto; }
-        tbody tr:nth-child(even) td { background-color: #fbfbfb; }
-        /* widen first columns for names/doctor */
-        tbody td:first-child, thead th:first-child { width: 22%; }
+
+        th, td { 
+            border: 1px solid #d1d5db; 
+            padding: 10px 12px; 
+            text-align: right; 
+            font-size: 12.5px; 
+            word-wrap: break-word; 
+            white-space: pre-wrap; 
+            word-break: break-word; 
+            hyphens: auto;
+        }
+
+        thead th { 
+            background-color: #f1f5f9; 
+            color: #111; 
+            font-weight: 600; 
+            font-size: 13px;
+        }
+
+        tbody tr:nth-child(even) td { 
+            background-color: #fafafa; 
+        }
+
+        tbody tr:hover td {
+            background-color: #f3f4f6;
+        }
+
+        /* Make columns more balanced */
+        tbody td:first-child, thead th:first-child { width: 20%; }
         tbody td:nth-child(2), thead th:nth-child(2) { width: 18%; }
-        /* remaining columns distribute equally */
-        .title-cell { background-color: #e5e7eb; font-weight: bold; font-size: 16px; text-align: center; padding: 10px; }
-        .subtitle-cell { background-color: #f9fafb; font-size: 12px; text-align: center; color: #444; padding: 6px; }
-        .summary { margin-top: 12px; padding: 10px; background-color: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 12px; }
+        tbody td, thead th { width: auto; }
+
+        /* Header cells */
+        .title-cell { 
+            background-color: #e2e8f0; 
+            font-weight: bold; 
+            font-size: 17px; 
+            text-align: center; 
+            padding: 14px; 
+            border-radius: 6px 6px 0 0;
+        }
+
+        .subtitle-cell { 
+            background-color: #f9fafb; 
+            font-size: 12px; 
+            text-align: center; 
+            color: #374151; 
+            padding: 8px; 
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        /* Footer/summary */
+        .summary { 
+            margin-top: 14px; 
+            padding: 12px 14px; 
+            background-color: #f9fafb; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 6px; 
+            font-size: 12.5px; 
+            line-height: 1.7; 
+            color: #333;
+        }
+
     </style>
 </head>
 <body>
     @php $colspan = max(1, count($headers)); @endphp
+
     <table>
         <thead>
             <tr>
@@ -31,7 +102,7 @@
             </tr>
             <tr>
                 <th class="subtitle-cell" colspan="{{ $colspan }}">
-                    نظام السجلات الطبية - AWDA &nbsp;&nbsp;|&nbsp;&nbsp; تاريخ التقرير: {{ $generatedAt }}
+                    نظام السجلات الطبية - AWDA &nbsp;&nbsp;|&nbsp;&nbsp; تقرير بتاريخ: {{ $generatedAt }}
                     @if(isset($meta['date_range']))
                         &nbsp;&nbsp;|&nbsp;&nbsp; الفترة: من {{ $meta['date_range']['from_date'] ?? '' }} إلى {{ $meta['date_range']['to_date'] ?? '' }}
                     @endif
@@ -62,7 +133,7 @@
             $y = $pdf->get_height() - 28;
             $x = $pdf->get_width() / 2;
             $text = "صفحة {PAGE_NUM} من {PAGE_COUNT}";
-            $pdf->page_text($x, $y, $text, $font, $size, [0.2,0.2,0.2], 0.0, 0.5, true);
+            $pdf->page_text($x, $y, $text, $font, $size, [0.3,0.3,0.3], 0.0, 0.5, true);
         }
     </script>
 
@@ -71,5 +142,3 @@
     @endif
 </body>
 </html>
-
-
