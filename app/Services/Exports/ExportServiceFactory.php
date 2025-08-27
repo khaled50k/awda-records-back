@@ -18,7 +18,8 @@ class ExportServiceFactory
         return match ($format) {
             'csv' => app()->make(CsvExportService::class),
             'excel' => app()->make(ExcelExportService::class),
-            'pdf' => app()->make(PdfExportService::class),
+            // Fresh, self-contained Arabic PDF table exporter
+            'pdf' => app()->make(ArabicPdfTableExportService::class),
             default => throw new InvalidArgumentException("Export format '{$format}' is not supported.")
         };
     }
