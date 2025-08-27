@@ -17,6 +17,13 @@ class PdfExportService implements ExportServiceInterface
      */
     public function export(array $data, string $filename)
     {
+        // Ensure DomPDF is configured for UTF-8 and Arabic-capable fonts
+        Pdf::setOptions([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled' => true,
+            'defaultFont' => 'DejaVu Sans', // Supports Arabic glyphs
+        ]);
+
         $html = $this->generateHtml($data);
         
         $pdf = Pdf::loadHTML($html);
@@ -54,17 +61,18 @@ class PdfExportService implements ExportServiceInterface
             <meta charset="UTF-8">
             <title>تقرير النقل اليومي</title>
             <style>
-                body { font-family: Arial, sans-serif; margin: 20px; direction: rtl; }
-                .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-                .header h1 { color: #333; margin: 0; }
-                .header p { color: #666; margin: 5px 0; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: right; font-size: 12px; }
+                @page { margin: 20px; }
+                body { font-family: "DejaVu Sans", "Amiri", "Arial", sans-serif; direction: rtl; unicode-bidi: embed; color: #111; }
+                .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                .header h1 { color: #333; margin: 0; font-size: 20px; }
+                .header p { color: #666; margin: 4px 0; font-size: 12px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 12px; table-layout: fixed; }
+                th, td { border: 1px solid #bbb; padding: 6px; text-align: right; font-size: 11px; word-wrap: break-word; }
                 th { background-color: #f2f2f2; font-weight: bold; }
-                tr:nth-child(even) { background-color: #f9f9f9; }
-                .summary { margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 5px; }
-                .summary h3 { margin-top: 0; color: #333; }
-                .summary p { margin: 5px 0; }
+                tr:nth-child(even) { background-color: #fbfbfb; }
+                .summary { margin-top: 14px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; font-size: 12px; }
+                .summary h3 { margin: 0 0 6px 0; color: #333; font-size: 14px; }
+                .nowrap { white-space: nowrap; }
             </style>
         </head>
         <body>
@@ -103,7 +111,9 @@ class PdfExportService implements ExportServiceInterface
             $html .= '<tr>';
             foreach ($headers as $header) {
                 $value = $row[$header] ?? '';
-                $html .= '<td>' . htmlspecialchars($value) . '</td>';
+                // Convert newlines to <br> to preserve multi-line Arabic text
+                $value = nl2br((string) $value);
+                $html .= '<td>' . $value . '</td>';
             }
             $html .= '</tr>';
         }
