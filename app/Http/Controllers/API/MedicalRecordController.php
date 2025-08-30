@@ -757,7 +757,7 @@ class MedicalRecordController extends BaseController
                 'date_range' => ['from_date' => $fromDate, 'to_date' => $toDate],
                 'summary' => ['total_patients' => 0, 'total_records' => 0, 'total_transfers' => 0],
                 'patients' => [],
-            ], 'تم جلب تقرير النقل اليومي بنجاح');
+            ], 'تم جلب تقرير السجلات الطبية اليومي بنجاح');
         }
 
         // Process the records into the final pivoted format.

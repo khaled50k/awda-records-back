@@ -54,7 +54,7 @@ class PdfExportService implements ExportServiceInterface
 
         return $this->renderer->downloadTable(
             $filename,
-            'تقرير النقل اليومي',
+            'تقرير السجلات الطبية اليومي',
             $headers,
             $rows,
             $meta

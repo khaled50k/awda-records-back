@@ -45,7 +45,7 @@ class ArabicPdfTableExportService implements ExportServiceInterface
             }, $keys);
         })->all();
 
-        $title = 'تقرير النقل اليومي';
+        $title = 'تقرير السجلات الطبية اليومي';
         $generatedAt = now()->format('Y-m-d H:i:s');
         $dateRange = $data['date_range'] ?? null;
 

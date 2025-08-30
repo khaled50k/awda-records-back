@@ -74,7 +74,7 @@ class ReportsController extends BaseController
                 'reports' => [
                     [
                         'type' => 'daily_transfers',
-                        'name' => 'تقرير النقل اليومي',
+                        'name' => 'تقرير السجلات الطبية اليومي',
                         'description' => 'تقرير شامل لعمليات نقل السجلات الطبية',
                         'supported_formats' => ['csv', 'excel', 'pdf'],
                         'filters' => [

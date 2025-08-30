@@ -89,7 +89,7 @@ class DailyTransfersReportService implements ReportServiceInterface
     public function getMetadata(): array
     {
         return [
-            'title' => 'تقرير النقل اليومي',
+            'title' => 'تقرير السجلات الطبية اليومي',
             'description' => 'تقرير شامل لعمليات نقل السجلات الطبية',
             'columns' => [
                 'patient_id' => 'رقم المريض',
