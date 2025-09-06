@@ -109,6 +109,26 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        'backup' => [
+            'driver' => env('BACKUP_DB_CONNECTION', 'mysql'),
+            'url' => env('BACKUP_DB_URL'),
+            'host' => env('BACKUP_DB_HOST', '127.0.0.1'),
+            'port' => env('BACKUP_DB_PORT', '3306'),
+            'database' => env('BACKUP_DB_DATABASE', 'awda_records_backup'),
+            'username' => env('BACKUP_DB_USERNAME', 'root'),
+            'password' => env('BACKUP_DB_PASSWORD', ''),
+            'unix_socket' => env('BACKUP_DB_SOCKET', ''),
+            'charset' => env('BACKUP_DB_CHARSET', 'utf8mb4'),
+            'collation' => env('BACKUP_DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('BACKUP_MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
     ],
 
     /*

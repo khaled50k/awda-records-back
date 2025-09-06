@@ -11,6 +11,8 @@ use App\Models\Reports;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Rap2hpoutre\FastExcel\FastExcel;
 
 class ReportsController extends BaseController
 {
@@ -35,13 +37,11 @@ class ReportsController extends BaseController
             // Generate report data
             $reportData = $reportService->generate($filters);
             
-            // Get the export service for the requested format
-            $exportService = ExportServiceFactory::create($format);
-            
-            // Generate and return the file
+            // Generate filename
             $filename = $this->generateFilename($reportType, $format, $filters);
             
-            return $exportService->export($reportData, $filename);
+            // Handle different export formats
+            return $this->handleExportFormat($format, $reportData, $filename);
             
         } catch (\Exception $e) {
             Log::error('Report generation failed', [
@@ -108,6 +108,121 @@ class ReportsController extends BaseController
             'daily_transfers' => new DailyTransfersReportService(),
             default => throw new \InvalidArgumentException("Report type '{$reportType}' is not supported.")
         };
+    }
+
+    /**
+     * Handle different export formats.
+     *
+     * @param string $format
+     * @param array $reportData
+     * @param string $filename
+     * @return \Illuminate\Http\JsonResponse|\Symfony\Component\HttpFoundation\BinaryFileResponse
+     */
+    private function handleExportFormat(string $format, array $reportData, string $filename)
+    {
+        return match ($format) {
+            'excel' => $this->exportToExcel($reportData, $filename),
+            default => $this->exportWithService($format, $reportData, $filename)
+        };
+    }
+
+    /**
+     * Export data to Excel format with Arabic RTL support.
+     *
+     * @param array $reportData
+     * @param string $filename
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function exportToExcel(array $reportData, string $filename)
+    {
+        // Prepare data with Arabic headers
+        $exportData = $this->prepareExcelData($reportData['data']);
+
+        // Create temp directory and file path
+        $filePath = $this->createTempFile($filename, 'xlsx');
+        $fullPath = storage_path('app/public/' . $filePath);
+
+        // Export to Excel file
+        (new FastExcel($exportData))->export($fullPath);
+
+        // Return file URL response
+        return $this->createFileUrlResponse($filePath, basename($filePath));
+    }
+
+    /**
+     * Export using the service factory for other formats.
+     *
+     * @param string $format
+     * @param array $reportData
+     * @param string $filename
+     * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
+     */
+    private function exportWithService(string $format, array $reportData, string $filename)
+    {
+        $exportService = ExportServiceFactory::create($format);
+        return $exportService->export($reportData, $filename);
+    }
+
+    /**
+     * Prepare data for Excel export with Arabic headers.
+     *
+     * @param \Illuminate\Support\Collection $data
+     * @return \Illuminate\Support\Collection
+     */
+    private function prepareExcelData($data)
+    {
+        return collect($data)->map(function ($patient) {
+            return [
+                'رقم المريض' => $patient['patient_id'],
+                'اسم المريض' => $patient['patient_name'],
+                'الطبيب' => $patient['doctor_or_reviewed_party'],
+                // Add problem type columns dynamically
+                ...array_filter($patient, function ($value, $key) {
+                    return !in_array($key, ['patient_id', 'patient_name', 'doctor_or_reviewed_party']);
+                }, ARRAY_FILTER_USE_BOTH)
+            ];
+        });
+    }
+
+    /**
+     * Create a temporary file path for export.
+     *
+     * @param string $filename
+     * @param string $extension
+     * @return string
+     */
+    private function createTempFile(string $filename, string $extension): string
+    {
+        $tempDir = 'temp';
+        
+        // Create temp directory if it doesn't exist
+        if (!Storage::disk('public')->exists($tempDir)) {
+            Storage::disk('public')->makeDirectory($tempDir);
+        }
+
+        // Generate filename with correct extension
+        $finalFilename = str_replace(['.excel', '.csv', '.pdf'], '.' . $extension, $filename);
+        
+        return $tempDir . '/' . $finalFilename;
+    }
+
+    /**
+     * Create a JSON response with file URL.
+     *
+     * @param string $filePath
+     * @param string $filename
+     * @return \Illuminate\Http\JsonResponse
+     */
+    private function createFileUrlResponse(string $filePath, string $filename)
+    {
+        $fileUrl = url('storage/' . $filePath);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'تم إنشاء التقرير بنجاح',
+            'file_url' => $fileUrl,
+            'filename' => $filename
+        ]);
     }
 
     /**

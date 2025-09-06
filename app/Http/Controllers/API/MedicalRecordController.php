@@ -794,8 +794,8 @@ class MedicalRecordController extends BaseController
             return $patientRow;
         });
 
-        // Export to Excel using Fast Excel
-        $filename = "daily_transfers_report_{$fromDate}_to_{$toDate}.csv";
+        // Use FastExcel for proper Arabic RTL support
+        $filename = "daily_transfers_report_{$fromDate}_to_{$toDate}.xlsx";
         
         // Prepare data for Excel export with proper headers
         $exportData = $formattedData->map(function ($patient) {
@@ -810,7 +810,28 @@ class MedicalRecordController extends BaseController
             ];
         });
 
-        return (new FastExcel($exportData))->download($filename);
+        // Create temp directory if it doesn't exist
+        $tempDir = storage_path('app/public/temp');
+        if (!file_exists($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+        
+        // Create unique filename to avoid conflicts
+        $uniqueFilename = time() . '_' . $filename;
+        $filePath = $tempDir . DIRECTORY_SEPARATOR . $uniqueFilename;
+        
+        // Use FastExcel to generate Excel file
+        (new FastExcel($exportData))->export($filePath);
+        
+        // Generate public URL for the file
+        $fileUrl = asset('storage/temp/' . $uniqueFilename);
+        
+        // Return JSON response with file URL
+        return $this->sendResponse([
+            'file_url' => $fileUrl,
+            'filename' => $filename,
+            'message' => 'تم إنشاء ملف التقرير بنجاح'
+        ], 'تم جلب تقرير السجلات الطبية اليومي بنجاح');
     }
 
     /**
@@ -963,42 +984,49 @@ class MedicalRecordController extends BaseController
         // Get all records (no pagination for export)
         $records = $query->get();
 
-        // Transform data for export
+        // Transform data for export with Arabic headers
         $exportData = $records->map(function ($record) {
             return [
-                'Record ID' => $record->record_id,
-                'Patient Name' => $record->patient->full_name ?? 'N/A',
-                'Patient National ID' => $record->patient->national_id ?? 'N/A',
-                'Health Center' => $record->patient->healthCenter->label_en ?? 'N/A',
-                'Status' => $record->status->label_en ?? 'N/A',
-                'Problem Type' => $record->problemType->label_en ?? 'N/A',
-                'Danger Level' => $record->dangerLevel->label_en ?? 'N/A',
-                'Reviewed By' => $record->reviewed_party ?? 'N/A',
-                'Transfer Status' => $record->transferStatus->label_en ?? 'N/A',
-                'Created By' => $record->creator->full_name ?? 'N/A',
-                'Created At' => $record->created_at->format('Y-m-d H:i:s'),
-                'Last Modified By' => $record->lastModifier->full_name ?? 'N/A',
-                'Last Modified At' => $record->updated_at->format('Y-m-d H:i:s'),
-                'Transfers Count' => $record->transfers->count(),
-                'Transfer Notes' => $record->transfers->pluck('transfer_notes')->implode('; '),
+                'رقم السجل' => $record->record_id,
+                'اسم المريض' => $record->patient->full_name ?? 'غير محدد',
+                'الرقم الوطني' => $record->patient->national_id ?? 'غير محدد',
+                'المركز الصحي' => $record->patient->healthCenter->label_ar ?? $record->patient->healthCenter->label_en ?? 'غير محدد',
+                'الحالة' => $record->status->label_ar ?? $record->status->label_en ?? 'غير محدد',
+                'نوع المشكلة' => $record->problemType->label_ar ?? $record->problemType->label_en ?? 'غير محدد',
+                'مستوى الخطورة' => $record->dangerLevel->label_ar ?? $record->dangerLevel->label_en ?? 'غير محدد',
+                'تمت المراجعة من قبل' => $record->reviewed_party ?? 'غير محدد',
+                'حالة التحويل' => $record->transferStatus->label_ar ?? $record->transferStatus->label_en ?? 'غير محدد',
+                'أنشئ بواسطة' => $record->creator->full_name ?? 'غير محدد',
+                'تاريخ الإنشاء' => $record->created_at->format('Y-m-d H:i:s'),
+                'آخر تعديل بواسطة' => $record->lastModifier->full_name ?? 'غير محدد',
+                'تاريخ آخر تعديل' => $record->updated_at->format('Y-m-d H:i:s'),
+                'عدد التحويلات' => $record->transfers->count(),
+                'ملاحظات التحويل' => $record->transfers->pluck('transfer_notes')->implode('; '),
             ];
         });
 
+        // Create temp directory if it doesn't exist
+        $tempDir = storage_path('app/public/temp');
+        if (!file_exists($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+        
+        // Create unique filename to avoid conflicts
+        $filename = 'medical_records_export_' . now()->format('Y-m-d_H-i-s') . '.xlsx';
+        $uniqueFilename = time() . '_' . $filename;
+        $filePath = $tempDir . DIRECTORY_SEPARATOR . $uniqueFilename;
+        
+        // Use FastExcel to generate Excel file with Arabic RTL support
+        (new FastExcel($exportData))->export($filePath);
+        
+        // Generate public URL for the file
+        $fileUrl = asset('storage/temp/' . $uniqueFilename);
+        
+        // Return JSON response with file URL
         return $this->sendResponse([
-            'total_records' => $exportData->count(),
-            'data' => $exportData,
-            'filters_applied' => $request->only([
-                'patient_name',
-                'patient_national_id',
-                'status_code',
-                'problem_type_code',
-                'danger_level_code',
-                'reviewed_party_user_id',
-                'transfer_status_code',
-                'created_from',
-                'created_to',
-                'search'
-            ])
+            'file_url' => $fileUrl,
+            'filename' => $filename,
+            'message' => 'تم إنشاء ملف التصدير بنجاح'
         ], 'تم تصدير البيانات بنجاح');
     }
 
