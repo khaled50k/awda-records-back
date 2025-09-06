@@ -395,7 +395,8 @@ class MedicalRecordController extends BaseController
             'danger_level_code' => 'required|string|exists:static_data,code',
             'reviewed_party' => 'required|string|max:50',
             'status_code' => 'required|string|exists:static_data,code',
-            'recipient_id' => 'nullable|integer|exists:users,user_id', // Optional recipient for immediate transfer , shows only for admin
+            'recipient_ids' => 'nullable|array', // Array of recipient IDs for immediate transfer
+            'recipient_ids.*' => 'integer|exists:users,user_id', // Each recipient must be a valid user
             'transfer_notes' => 'required|string', // Optional transfer notes
         ], [
             'patient_id.required' => 'معرف المريض مطلوب',
@@ -413,15 +414,16 @@ class MedicalRecordController extends BaseController
             'status_code.required' => 'الحالة مطلوبة',
             'status_code.string' => 'رمز الحالة يجب أن يكون نصاً',
             'status_code.exists' => 'رمز الحالة غير موجود',
-            'recipient_id.integer' => 'معرف المستلم يجب أن يكون رقماً صحيحاً',
-            'recipient_id.exists' => 'معرف المستلم غير موجود',
+            'recipient_ids.array' => 'معرفات المستلمين يجب أن تكون مصفوفة',
+            'recipient_ids.*.integer' => 'معرف المستلم يجب أن يكون رقماً صحيحاً',
+            'recipient_ids.*.exists' => 'معرف المستلم غير موجود',
             'transfer_notes.string' => 'ملاحظات النقل يجب أن تكون نصاً',
             'transfer_notes.required' => 'الملاحظات  مطلوبة',
         ]);
 
-        // Additional validation: if recipient is provided, transfer_notes is required
-        if ($request->filled('recipient_id') && !$request->filled('transfer_notes')) {
-            return $this->sendError('ملاحظات النقل مطلوبة عند تحديد المستلم', [], 422);
+        // Additional validation: if recipients are provided, transfer_notes is required
+        if ($request->filled('recipient_ids') && !$request->filled('transfer_notes')) {
+            return $this->sendError('ملاحظات النقل مطلوبة عند تحديد المستلمين', [], 422);
         }
 
         if ($validator->fails()) {
@@ -469,25 +471,39 @@ class MedicalRecordController extends BaseController
                 'created_by' => $user->user_id,
                 'last_modified_by' => $user->user_id,
             ]);
-            // in al lconditions create a transfer but if no recipient is  provided, send to all admins notifcation
-            // Verify recipient exists and is not the same as sender
-            // Create the transfer
-            $transfer = RecordTransfer::create([
-                'record_id' => $record->record_id,
-                'sender_id' => $user->user_id,
-                'recipient_id' => $request->recipient_id ?? null,
-                'transfer_notes' => $request->transfer_notes,
-            ]);
-
-            $recipient = User::find($request->recipient_id);
-            if ($recipient) {
-
-
-                // Broadcast transfer events
-                event(new TransferCreated($transfer, $user, $recipient));
-                event(new TransferReceived($transfer, $user, $recipient));
+            // Create transfers for each recipient or all admins if no recipients provided
+            $transfers = [];
+            $recipientIds = $request->recipient_ids ?? [];
+            
+            if (!empty($recipientIds)) {
+                // Create transfer for each specified recipient
+                foreach ($recipientIds as $recipientId) {
+                    $recipient = User::find($recipientId);
+                    if ($recipient && $recipient->user_id !== $user->user_id) {
+                        $transfer = RecordTransfer::create([
+                            'record_id' => $record->record_id,
+                            'sender_id' => $user->user_id,
+                            'recipient_id' => $recipientId,
+                            'transfer_notes' => $request->transfer_notes,
+                        ]);
+                        $transfers[] = $transfer;
+                        
+                        // Broadcast transfer events
+                        event(new TransferCreated($transfer, $user, $recipient));
+                        event(new TransferReceived($transfer, $user, $recipient));
+                    }
+                }
             } else {
-                // send to all admins notification
+                // Create transfer with no specific recipient and send to all admins
+                $transfer = RecordTransfer::create([
+                    'record_id' => $record->record_id,
+                    'sender_id' => $user->user_id,
+                    'recipient_id' => null,
+                    'transfer_notes' => $request->transfer_notes,
+                ]);
+                $transfers[] = $transfer;
+                
+                // Send notification to all admins
                 $admins = User::where('role_code', 'admin')->get();
                 foreach ($admins as $admin) {
                     event(new TransferCreated($transfer, $user, $admin));
@@ -504,15 +520,17 @@ class MedicalRecordController extends BaseController
         // Broadcast event for admin notifications
         event(new \App\Events\MedicalRecordCreated($record, $user));
 
-        $message = isset($transfer) ? 'تم إنشاء السجل الطبي مع النقل تلقائياً بنجاح' : 'تم إنشاء السجل الطبي بنجاح';
+        $message = !empty($transfers) ? 'تم إنشاء السجل الطبي مع النقل تلقائياً بنجاح' : 'تم إنشاء السجل الطبي بنجاح';
 
         $responseData = [
             'record' => $record->load(['patient.healthCenter', 'status', 'problemType', 'dangerLevel', 'transferStatus', 'creator'])
         ];
 
-        // If a transfer was created, include it in the response
-        if (isset($transfer)) {
-            $responseData['transfer'] = $transfer->load(['recipient', 'sender']);
+        // If transfers were created, include them in the response
+        if (!empty($transfers)) {
+            $responseData['transfers'] = collect($transfers)->map(function($transfer) {
+                return $transfer->load(['recipient', 'sender']);
+            });
         }
 
         return $this->sendResponse($responseData, $message, 201);
