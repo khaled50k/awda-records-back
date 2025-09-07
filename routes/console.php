@@ -10,7 +10,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote')->hourly();
 
 // Schedule incremental database backup every 3 hours
-Schedule::job(new IncrementalDatabaseBackupJob)
+Schedule::job(IncrementalDatabaseBackupJob::class)
     ->everyThreeHours()
     ->name('incremental-database-backup')
     ->withoutOverlapping()
