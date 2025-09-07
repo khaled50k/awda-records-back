@@ -91,15 +91,17 @@ class RecordTransferController extends BaseController
 
         $validator = Validator::make($request->all(), [
             'record_id' => 'required|integer|exists:medical_records,record_id',
-            'recipient_id' => 'nullable|integer|exists:users,user_id',
+            'recipient_ids' => 'nullable|array',
+            'recipient_ids.*' => 'integer|exists:users,user_id',
             'transfer_notes' => 'required|string',
             'transfer_status_code' => 'required|string|exists:static_data,code', // Transfer status for the medical record
         ], [
             'record_id.required' => 'معرف السجل الطبي مطلوب',
             'record_id.integer' => 'معرف السجل الطبي يجب أن يكون رقماً صحيحاً',
             'record_id.exists' => 'معرف السجل الطبي غير موجود',
-            'recipient_id.integer' => 'معرف المستلم يجب أن يكون رقماً صحيحاً',
-            'recipient_id.exists' => 'معرف المستلم غير موجود',
+            'recipient_ids.array' => 'معرفات المستلمين يجب أن تكون مصفوفة',
+            'recipient_ids.*.integer' => 'معرف المستلم يجب أن يكون رقماً صحيحاً',
+            'recipient_ids.*.exists' => 'معرف المستلم غير موجود',
             'transfer_notes.required' => 'ملاحظات النقل مطلوبة',
             'transfer_notes.string' => 'ملاحظات النقل يجب أن تكون نصاً',
             'transfer_status_code.string' => 'رمز حالة النقل يجب أن يكون نصاً',
@@ -129,12 +131,28 @@ class RecordTransferController extends BaseController
                 $record->update(['transfer_status_code' => $request->transfer_status_code]);
             }
 
-            $transfer = RecordTransfer::create([
-                'record_id' => $request->record_id,
-                'sender_id' => auth()->user()->user_id,
-                'recipient_id' => $request->recipient_id ?? null,
-                'transfer_notes' => $request->transfer_notes,
-            ]);
+            $transfers = [];
+            $recipientIds = $request->recipient_ids ?? [];
+
+            // If no recipients provided, create one transfer without recipient
+            if (empty($recipientIds)) {
+                $transfers[] = RecordTransfer::create([
+                    'record_id' => $request->record_id,
+                    'sender_id' => auth()->user()->user_id,
+                    'recipient_id' => null,
+                    'transfer_notes' => $request->transfer_notes,
+                ]);
+            } else {
+                // Create transfer for each recipient
+                foreach ($recipientIds as $recipientId) {
+                    $transfers[] = RecordTransfer::create([
+                        'record_id' => $request->record_id,
+                        'sender_id' => auth()->user()->user_id,
+                        'recipient_id' => $recipientId,
+                        'transfer_notes' => $request->transfer_notes,
+                    ]);
+                }
+            }
 
             DB::commit();
         } catch (\Exception $e) {
@@ -142,28 +160,47 @@ class RecordTransferController extends BaseController
             return $this->sendError('حدث خطأ أثناء إنشاء عملية النقل', [], 500);
         }
 
-        // Get recipient user for notifications
-        // notification to all admins if no recipient is provided
-        if (!$request->recipient_id) {
+        // Get recipient users for notifications
+        $recipientIds = $request->recipient_ids ?? [];
+        
+        // notification to all admins if no recipients are provided
+        if (empty($recipientIds)) {
             $admins = User::where('role_code', 'admin')->get();
             foreach ($admins as $admin) {
-                // event(new \App\Events\TransferCreated($transfer, auth()->user(), $admin));
+                foreach ($transfers as $transfer) {
+                    // event(new \App\Events\TransferCreated($transfer, auth()->user(), $admin));
+                }
+            }
+        } else {
+            // notification to each recipient
+            foreach ($recipientIds as $recipientId) {
+                $recipient = User::find($recipientId);
+                if ($recipient) {
+                    // Find the transfer for this specific recipient
+                    $recipientTransfer = collect($transfers)->first(function($transfer) use ($recipientId) {
+                        return $transfer->recipient_id == $recipientId;
+                    });
+                    
+                    if ($recipientTransfer) {
+                        // event(new \App\Events\TransferCreated($recipientTransfer, auth()->user(), $recipient));
+                        // event(new \App\Events\TransferReceived($recipientTransfer, auth()->user(), $recipient));
+                    }
+                }
             }
         }
 
-        // notification to the recipient if provided
-        if ($request->recipient_id) {
-            $recipient = User::find($request->recipient_id);
-            // event(new \App\Events\TransferCreated($transfer, auth()->user(), $recipient));
-            // event(new \App\Events\TransferReceived($transfer, auth()->user(), $recipient));
+        // Load relationships for all transfers
+        foreach ($transfers as $transfer) {
+            $transfer->load(['medicalRecord.patient', 'medicalRecord.problemType', 'medicalRecord.status', 'sender', 'recipient']);
         }
 
-        // Load relationships for notification
-        $transfer->load(['medicalRecord.patient', 'medicalRecord.problemType', 'medicalRecord.status', 'sender']);
-
         return $this->sendResponse(
-            ['transfer' => $transfer->load(['medicalRecord.patient', 'sender', 'recipient'])],
-            'تم إنشاء عملية النقل بنجاح',
+            [
+                'transfers' => $transfers,
+                'total_transfers' => count($transfers),
+                'recipients_count' => count($recipientIds)
+            ],
+            'تم إنشاء عمليات النقل بنجاح',
             201
         );
     }
