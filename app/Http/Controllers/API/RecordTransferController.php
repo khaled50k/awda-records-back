@@ -147,15 +147,15 @@ class RecordTransferController extends BaseController
         if (!$request->recipient_id) {
             $admins = User::where('role_code', 'admin')->get();
             foreach ($admins as $admin) {
-                event(new \App\Events\TransferCreated($transfer, auth()->user(), $admin));
+                // event(new \App\Events\TransferCreated($transfer, auth()->user(), $admin));
             }
         }
 
         // notification to the recipient if provided
         if ($request->recipient_id) {
             $recipient = User::find($request->recipient_id);
-            event(new \App\Events\TransferCreated($transfer, auth()->user(), $recipient));
-            event(new \App\Events\TransferReceived($transfer, auth()->user(), $recipient));
+            // event(new \App\Events\TransferCreated($transfer, auth()->user(), $recipient));
+            // event(new \App\Events\TransferReceived($transfer, auth()->user(), $recipient));
         }
 
         // Load relationships for notification

@@ -518,7 +518,7 @@ class MedicalRecordController extends BaseController
         }
 
         // Broadcast event for admin notifications
-        event(new \App\Events\MedicalRecordCreated($record, $user));
+        // event(new \App\Events\MedicalRecordCreated($record, $user));
 
         $message = !empty($transfers) ? 'تم إنشاء السجل الطبي مع النقل تلقائياً بنجاح' : 'تم إنشاء السجل الطبي بنجاح';
 
