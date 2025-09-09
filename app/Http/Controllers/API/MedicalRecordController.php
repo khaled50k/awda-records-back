@@ -357,21 +357,21 @@ class MedicalRecordController extends BaseController
         $this->authorize('view', $record);
 
         $user = auth()->user();
-        
+
         // If user is admin, load all transfers
         // If user is employee and created this record, load only their last sent transfer
         if ($user->isAdmin()) {
             $record->load(['transfers.recipient', 'transfers.sender']);
         } else if ($record->created_by === $user->user_id) {
             // Load only the last transfer sent by this user
-            $record->load(['transfers' => function($query) use ($user) {
+            $record->load(['transfers' => function ($query) use ($user) {
                 $query->where('sender_id', $user->user_id)
-                      ->orderBy('created_at', 'desc')
-                      ->limit(1);
+                    ->orderBy('created_at', 'desc')
+                    ->limit(1);
             }, 'transfers.recipient', 'transfers.sender']);
         } else {
             // For other users, load transfers where they are the recipient
-            $record->load(['transfers' => function($query) use ($user) {
+            $record->load(['transfers' => function ($query) use ($user) {
                 $query->where('recipient_id', $user->user_id);
             }, 'transfers.recipient', 'transfers.sender']);
         }
@@ -474,7 +474,7 @@ class MedicalRecordController extends BaseController
             // Create transfers for each recipient or all admins if no recipients provided
             $transfers = [];
             $recipientIds = $request->recipient_ids ?? [];
-            
+
             if (!empty($recipientIds)) {
                 // Create transfer for each specified recipient
                 foreach ($recipientIds as $recipientId) {
@@ -487,7 +487,7 @@ class MedicalRecordController extends BaseController
                             'transfer_notes' => $request->transfer_notes,
                         ]);
                         $transfers[] = $transfer;
-                        
+
                         // Broadcast transfer events
                         //event(new TransferCreated($transfer, $user, $recipient));
                         //event(new TransferReceived($transfer, $user, $recipient));
@@ -502,7 +502,7 @@ class MedicalRecordController extends BaseController
                     'transfer_notes' => $request->transfer_notes,
                 ]);
                 $transfers[] = $transfer;
-                
+
                 // Send notification to all admins
                 $admins = User::where('role_code', 'admin')->get();
                 foreach ($admins as $admin) {
@@ -528,7 +528,7 @@ class MedicalRecordController extends BaseController
 
         // If transfers were created, include them in the response
         if (!empty($transfers)) {
-            $responseData['transfers'] = collect($transfers)->map(function($transfer) {
+            $responseData['transfers'] = collect($transfers)->map(function ($transfer) {
                 return $transfer->load(['recipient', 'sender']);
             });
         }
@@ -556,14 +556,14 @@ class MedicalRecordController extends BaseController
             'transfers.recipient',
             'transfers.sender'
         ])->findOrFail($id);
-        
+
         $this->authorize('update', $record);
 
         $user = auth()->user();
-        
+
         // Load the last transfer for this record
         $lastTransfer = $record->transfers()->latest('created_at')->first();
-        
+
         // Validation rules for medical record
         $validator = Validator::make($request->all(), [
             'patient_id' => 'sometimes|integer|exists:patients,patient_id',
@@ -572,7 +572,7 @@ class MedicalRecordController extends BaseController
             'reviewed_party' => 'sometimes|string|max:50',
             'status_code' => 'sometimes|string|exists:static_data,code',
             'transfer_status_code' => 'sometimes|nullable|string|exists:static_data,code',
-            
+
             // Transfer data validation (if transfer exists)
             'transfer_notes' => 'sometimes|string|max:1000',
             'recipient_id' => 'sometimes|nullable|integer|exists:users,user_id',
@@ -609,7 +609,7 @@ class MedicalRecordController extends BaseController
             // Update medical record fields
             $recordFields = [
                 'patient_id',
-                'problem_type_code', 
+                'problem_type_code',
                 'danger_level_code',
                 'reviewed_party',
                 'status_code',
@@ -628,17 +628,17 @@ class MedicalRecordController extends BaseController
             // Update transfer data if transfer exists and user has permission
             if ($lastTransfer && ($user->isAdmin() || $lastTransfer->sender_id === $user->user_id)) {
                 $transferUpdated = false;
-                
+
                 if ($request->has('transfer_notes')) {
                     $lastTransfer->transfer_notes = $request->transfer_notes;
                     $transferUpdated = true;
                 }
-                
+
                 if ($request->has('recipient_id')) {
                     $lastTransfer->recipient_id = $request->recipient_id;
                     $transferUpdated = true;
                 }
-                
+
                 if ($transferUpdated) {
                     $lastTransfer->save();
                 }
@@ -719,7 +719,7 @@ class MedicalRecordController extends BaseController
         $this->authorize('viewAny', MedicalRecord::class);
 
         $user = auth()->user();
-        
+
         // FIX 1: Parse and reformat incoming dates to the standard 'Y-m-d' format.
         // This ensures the database query works correctly, regardless of the input format.
         try {
@@ -746,24 +746,24 @@ class MedicalRecordController extends BaseController
             'transfers' => function ($q) use ($fromDate, $toDate) {
                 // FIX 2: Use the correctly formatted dates in the query.
                 $q->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59'])
-                  ->with(['recipient'])
-                  ->orderBy('created_at', 'desc');
+                    ->with(['recipient'])
+                    ->orderBy('created_at', 'desc');
             }
         ])
-        ->whereHas('transfers', function ($q) use ($fromDate, $toDate) {
-            // FIX 3: Also use the correctly formatted dates here.
-            $q->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59']);
-        });
+            ->whereHas('transfers', function ($q) use ($fromDate, $toDate) {
+                // FIX 3: Also use the correctly formatted dates here.
+                $q->whereBetween('created_at', [$fromDate . ' 00:00:00', $toDate . ' 23:59:59']);
+            });
 
         // Apply authorization scope for non-admin users.
         if (!$user->isAdmin()) {
             $query->where(function ($q) use ($user) {
                 $q->where('created_by', $user->user_id)
-                  ->orWhere('last_modified_by', $user->user_id)
-                  ->orWhereHas('transfers', function ($transferQ) use ($user) {
-                      $transferQ->where('sender_id', $user->user_id)
-                                ->orWhere('recipient_id', $user->user_id);
-                  });
+                    ->orWhere('last_modified_by', $user->user_id)
+                    ->orWhereHas('transfers', function ($transferQ) use ($user) {
+                        $transferQ->where('sender_id', $user->user_id)
+                            ->orWhere('recipient_id', $user->user_id);
+                    });
             });
         }
 
@@ -783,11 +783,12 @@ class MedicalRecordController extends BaseController
 
         $formattedData = $groupedByPatient->map(function (Collection $patientRecords) use ($problemTypeColumnsAr) {
             $firstRecord = $patientRecords->first();
-            
+
             $patientRow = [
                 'patient_id'   => $firstRecord->patient_id,
                 'patient_name' => $firstRecord->patient->full_name,
                 'doctor_or_reviewed_party' => '',
+                'problem_date' => $patientRecords->min('created_at') ? Carbon::parse($patientRecords->min('created_at'))->format('Y-m-d') : '',
             ] + $problemTypeColumnsAr;
 
             foreach ($patientRecords as $record) {
@@ -808,13 +809,13 @@ class MedicalRecordController extends BaseController
                     $patientRow['doctor_or_reviewed_party'] = $reviewer;
                 }
             }
-            
+
             return $patientRow;
         });
 
         // Use FastExcel for proper Arabic RTL support
         $filename = "daily_transfers_report_{$fromDate}_to_{$toDate}.xlsx";
-        
+
         // Prepare data for Excel export with proper headers
         $exportData = $formattedData->map(function ($patient) {
             return [
@@ -823,8 +824,9 @@ class MedicalRecordController extends BaseController
                 'الطبيب' => $patient['doctor_or_reviewed_party'],
                 // Add problem type columns dynamically
                 ...array_filter($patient, function ($value, $key) {
-                    return !in_array($key, ['patient_id', 'patient_name', 'doctor_or_reviewed_party']);
-                }, ARRAY_FILTER_USE_BOTH)
+                    return !in_array($key, ['patient_id', 'patient_name', 'doctor_or_reviewed_party', 'problem_date']);
+                }, ARRAY_FILTER_USE_BOTH),
+                'تاريخ المشكلة' => $patient['problem_date'],
             ];
         });
 
@@ -833,17 +835,17 @@ class MedicalRecordController extends BaseController
         if (!file_exists($tempDir)) {
             mkdir($tempDir, 0755, true);
         }
-        
+
         // Create unique filename to avoid conflicts
         $uniqueFilename = time() . '_' . $filename;
         $filePath = $tempDir . DIRECTORY_SEPARATOR . $uniqueFilename;
-        
+
         // Use FastExcel to generate Excel file
         (new FastExcel($exportData))->export($filePath);
-        
+
         // Generate public URL for the file
         $fileUrl = asset('storage/temp/' . $uniqueFilename);
-        
+
         // Return JSON response with file URL
         return $this->sendResponse([
             'file_url' => $fileUrl,
@@ -1028,18 +1030,18 @@ class MedicalRecordController extends BaseController
         if (!file_exists($tempDir)) {
             mkdir($tempDir, 0755, true);
         }
-        
+
         // Create unique filename to avoid conflicts
         $filename = 'medical_records_export_' . now()->format('Y-m-d_H-i-s') . '.xlsx';
         $uniqueFilename = time() . '_' . $filename;
         $filePath = $tempDir . DIRECTORY_SEPARATOR . $uniqueFilename;
-        
+
         // Use FastExcel to generate Excel file with Arabic RTL support
         (new FastExcel($exportData))->export($filePath);
-        
+
         // Generate public URL for the file
         $fileUrl = asset('storage/temp/' . $uniqueFilename);
-        
+
         // Return JSON response with file URL
         return $this->sendResponse([
             'file_url' => $fileUrl,
