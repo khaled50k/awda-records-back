@@ -11,7 +11,7 @@ Artisan::command('inspire', function () {
 
 // Schedule incremental database backup every 3 3 hosu// Temporarily set to every minute for testing
 Schedule::job(new IncrementalDatabaseBackupJob)
-    ->everyMinute()
+    ->hourly()
     ->name('incremental-database-backup')
     ->withoutOverlapping()
     ->onOneServer();

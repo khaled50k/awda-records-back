@@ -145,8 +145,26 @@ class MedicalRecordController extends BaseController
                 $query->whereDate('created_at', '<=', $request->created_to);
             }
         } else {
-            // If no date range is provided, show only today's records
-            $query->whereDate('created_at', today());
+            // Check if any other filters are applied (excluding date, sort, and pagination filters)
+            $nonDateFilters = $request->only([
+                'patient_id', 'patient_name', 'patient_national_id', 'patient_gender',
+                'status_code', 'status_codes', 'problem_type_code', 'problem_type_codes',
+                'danger_level_code', 'danger_level_codes', 'reviewed_party_user_id',
+                'final_status_code', 'transfer_status_code', 'transfer_status_codes',
+                'created_by', 'last_modified_by', 'has_transfers', 'transfer_sender_id',
+                'transfer_recipient_id', 'transfer_notes', 'workflow_step_status',
+                'has_completed_workflow', 'search'
+            ]);
+            $nonDateFilters = array_filter($nonDateFilters, function ($value) {
+                return $value !== null && $value !== '';
+            });
+            
+            // If no other filters are applied, show only today's records
+            // If other filters are applied, search across all dates
+            if (empty($nonDateFilters)) {
+                $query->whereDate('created_at', today());
+            }
+            // If other filters are present, don't add date restriction (search all dates)
         }
 
         // Filter by last modification date range
