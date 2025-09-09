@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use Carbon\Carbon;
+use App\Models\BackupTracker;
 use Exception;
 
 class IncrementalBackupService
@@ -53,10 +54,19 @@ class IncrementalBackupService
                 $totalRecords += $recordCount;
                 $processedTables[$table] = $recordCount;
                 
+                // Update BackupTracker for this table
+                BackupTracker::updateBackupTracker(
+                    $table,
+                    $recordCount,
+                    null, // last_record_id not used in this implementation
+                    'completed',
+                    "Incremental backup completed at {$startTime}"
+                );
+                
                 Log::info("Backed up {$recordCount} records from table: {$table}");
             }
 
-            // Update last backup timestamp
+            // Update last backup timestamp in backup database
             $this->updateLastBackupTimestamp($startTime);
 
             return [
