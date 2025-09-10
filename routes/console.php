@@ -7,11 +7,11 @@ use App\Jobs\IncrementalDatabaseBackupJob;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote')->hourly();
+})->purpose('Display an inspiring quote');
 
-// Schedule incremental database backup every 3 3 hosu// Temporarily set to every minute for testing
-Schedule::job(new IncrementalDatabaseBackupJob)
-    ->hourly()
+// Schedule incremental database backup every 3 hours
+Schedule::command('backup:incremental --sync')
+    ->cron('0 */3 * * *')
     ->name('incremental-database-backup')
     ->withoutOverlapping()
     ->onOneServer();
