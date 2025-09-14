@@ -76,13 +76,25 @@ class IncrementalBackupCommand extends Command
         $this->info('Backup Results:');
         $this->line('================');
         
+        $gitStatus = 'Not attempted';
+        if (isset($result['git_upload'])) {
+            if ($result['git_upload'] === 'skipped') {
+                $gitStatus = '⊘ Skipped (no changes)';
+            } elseif ($result['git_upload']) {
+                $gitStatus = '✓ Success';
+            } else {
+                $gitStatus = '✗ Failed';
+            }
+        }
+        
         $this->table(
             ['Metric', 'Value'],
             [
                 ['Total Records Backed Up', $result['total_records']],
                 ['Tables Processed', count($result['tables'])],
                 ['Backup Time', $result['backup_time']],
-                ['Last Backup Time', $result['last_backup_time'] ?? 'First backup']
+                ['Last Backup Time', $result['last_backup_time'] ?? 'First backup'],
+                ['Git Repository Upload', $gitStatus]
             ]
         );
         

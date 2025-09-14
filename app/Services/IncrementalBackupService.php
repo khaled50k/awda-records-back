@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use Carbon\Carbon;
 use App\Models\BackupTracker;
+use App\Services\GitBackupService;
 use Exception;
 
 class IncrementalBackupService
@@ -69,13 +70,37 @@ class IncrementalBackupService
             // Update last backup timestamp in backup database
             $this->updateLastBackupTimestamp($startTime);
 
-            return [
+            $result = [
                 'success' => true,
                 'total_records' => $totalRecords,
                 'tables' => $processedTables,
                 'backup_time' => $startTime->toDateTimeString(),
                 'last_backup_time' => $lastBackupTime ? $lastBackupTime->toDateTimeString() : null
             ];
+
+            // Upload backup to Git repository only if there are changes
+            if ($totalRecords > 0) {
+                try {
+                    $gitService = new GitBackupService();
+                    $gitUploadSuccess = $gitService->uploadBackup($result);
+                    
+                    if ($gitUploadSuccess) {
+                        Log::info('Backup successfully uploaded to Git repository');
+                        $result['git_upload'] = true;
+                    } else {
+                        Log::warning('Failed to upload backup to Git repository');
+                        $result['git_upload'] = false;
+                    }
+                } catch (Exception $e) {
+                    Log::error('Git upload failed', ['error' => $e->getMessage()]);
+                    $result['git_upload'] = false;
+                }
+            } else {
+                Log::info('No changes detected, skipping Git upload');
+                $result['git_upload'] = 'skipped';
+            }
+
+            return $result;
 
         } catch (Exception $e) {
             Log::error('Incremental backup failed', [
